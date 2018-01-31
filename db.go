@@ -114,6 +114,19 @@ func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
 	return aPtr, a, nil
 }
 
+func (db *DB) cloneBytes(bPtr *ByteArray) (*ByteArray, error) {
+	newBPtr, newB, err := db.newBytes(bPtr.Size)
+	if err != nil {
+		return nil, err
+	}
+
+	old := db.getBytes(bPtr)
+
+	copy(newB, old)
+
+	return newBPtr, nil
+}
+
 func (db *DB) getBytes(b *ByteArray) []byte {
 	return (*[0x7fffff]byte)(db.allocator.GetPtr(b.Offset + uint64(unsafe.Sizeof(ByteArray{}))))[:b.Size]
 }
