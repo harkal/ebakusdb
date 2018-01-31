@@ -17,6 +17,7 @@ const alignmentBytesMinusOne = alignmentBytes - 1
 // BufferAllocator allocates memory in a preallocated buffer
 type BufferAllocator struct {
 	buffer        *[maxBufferSize]byte
+	bufferSize    uint64
 	firstFreeByte uint64
 }
 
@@ -26,7 +27,8 @@ func NewBufferAllocator(buf []byte) (*BufferAllocator, error) {
 		return nil, ErrInvalidSize
 	}
 	buffer := &BufferAllocator{
-		buffer: (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
+		buffer:     (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
+		bufferSize: uint64(len(buf)),
 	}
 	return buffer, nil
 }
@@ -41,7 +43,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		return 0, ErrInvalidSize
 	}
 
-	if b.firstFreeByte+size > uint64(len(b.buffer)) {
+	if b.firstFreeByte+size > b.bufferSize {
 		return 0, ErrOutOfMemory
 	}
 
@@ -49,7 +51,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 	b.firstFreeByte += size
 
 	// Ensure alignement
-	if b.firstFreeByte%alignmentBytesMinusOne != 0 {
+	if b.firstFreeByte&alignmentBytesMinusOne != 0 {
 		b.firstFreeByte += alignmentBytes
 		b.firstFreeByte &= ^uint64(alignmentBytesMinusOne)
 	}

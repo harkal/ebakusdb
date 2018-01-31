@@ -30,9 +30,9 @@ func Test_Allocate(t *testing.T) {
 		t.Fatal("failed to create buffer")
 	}
 
-	_, err = ba.Allocate(1000)
+	_, err = ba.Allocate(1024)
 	if err != nil {
-		t.Fatal("failed to allocate 1000 bytes")
+		t.Fatal("failed to allocate 1024 bytes")
 	}
 
 	_, err = ba.Allocate(totalSpace - 100)
@@ -40,9 +40,9 @@ func Test_Allocate(t *testing.T) {
 		t.Fatal("Unexpected error allocating totalSpace - 100 bytes")
 	}
 
-	_, err = ba.Allocate(totalSpace - 1000)
+	_, err = ba.Allocate(totalSpace - 1024)
 	if err != nil {
-		t.Fatal("Failed allocating totalSpace - 1000 bytes")
+		t.Fatal("Failed allocating totalSpace - 1024 bytes")
 	}
 }
 
