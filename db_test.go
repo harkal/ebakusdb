@@ -1,6 +1,7 @@
 package ebakusdb
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -12,14 +13,28 @@ func Test_Open(t *testing.T) {
 	}
 }
 
-func Test_Tnx(t *testing.T) {
+func Test_Tnx(test *testing.T) {
 
 	db, err := Open("test.db", 0, nil)
 	if err != nil || db == nil {
-		t.Fatal("Failed to open db")
+		test.Fatal("Failed to open db")
 	}
 
-	db.Txn()
+	t := db.Txn()
+	old, update := t.Insert([]byte("key"), "value")
+	if update == true {
+		test.Fatal("Insert failed")
+	}
+	fmt.Println("old:", old)
+	old, update = t.Insert([]byte("key"), "va")
+	if update == false || old != "value" {
+		test.Fatal("Update failed")
+	}
+	fmt.Println("old:", old)
+	old, update = t.Insert([]byte("harry"), "kalogirou")
+	if update == true {
+		test.Fatal("Update failed")
+	}
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
