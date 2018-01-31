@@ -60,3 +60,8 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 
 	return p, nil
 }
+
+func (b *BufferAllocator) Deallocate(pos uint64) error {
+
+	return nil
+}

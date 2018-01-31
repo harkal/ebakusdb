@@ -89,6 +89,13 @@ func (db *DB) Txn() *Txn {
 	return txn
 }
 
+func (db *DB) Commit(txn *Txn) error {
+	newRootPtr := txn.Commit()
+	db.getNode(db.root).Release()
+	db.root = newRootPtr
+	return nil
+}
+
 func (db *DB) newNode() (*Ptr, *Node, error) {
 	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(Node{})))
 	if err != nil {
@@ -102,6 +109,10 @@ func (db *DB) newNode() (*Ptr, *Node, error) {
 
 func (db *DB) getNode(p *Ptr) *Node {
 	return (*Node)(db.allocator.GetPtr(p.Offset))
+}
+
+func (db *DB) Get(k []byte) (interface{}, bool) {
+	return db.getNode(db.root).Get(db, k)
 }
 
 func (db *DB) newLeafNode() (*Ptr, *leafNode, error) {

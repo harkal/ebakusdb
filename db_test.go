@@ -35,6 +35,38 @@ func Test_Tnx(test *testing.T) {
 	if update == true {
 		test.Fatal("Update failed")
 	}
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	if v, _ := db.Get([]byte("key")); v != "value" {
+		test.Fatal("Get failed")
+	}
+}
+
+func Test_Get(test *testing.T) {
+
+	db, err := Open("test.db", 0, nil)
+	if err != nil || db == nil {
+		test.Fatal("Failed to open db")
+	}
+
+	t := db.Txn()
+	_, update := t.Insert([]byte("key"), "value")
+	if update == true {
+		test.Fatal("Insert failed")
+	}
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	if v, _ := db.Get([]byte("key")); v != "value" {
+		test.Fatal("Get failed")
+	}
+
 }
 
 func Test_ByteArrayCreation(t *testing.T) {

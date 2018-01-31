@@ -47,6 +47,36 @@ func (n *Node) isLeaf() bool {
 	return n.leafPtr != nil
 }
 
+func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
+	search := k
+	for {
+		// Check for key exhaustion
+		if len(search) == 0 {
+			if n.isLeaf() {
+				return db.getLeafNode(n.leafPtr).val, true
+			}
+			break
+		}
+
+		// Look for an edge
+		_, nPtr := n.getEdge(search[0])
+		if nPtr == nil {
+			break
+		}
+
+		n = db.getNode(nPtr)
+
+		// Consume the search prefix
+		nprefix := db.getBytes(n.prefixPtr)
+		if bytes.HasPrefix(search, nprefix) {
+			search = search[n.prefixPtr.Size:]
+		} else {
+			break
+		}
+	}
+	return nil, false
+}
+
 func (n *Node) addEdge(e edge) {
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
@@ -309,4 +339,18 @@ func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
 		t.root = newRoot
 	}
 	return oldVal, didUpdate
+}
+
+func (t *Txn) Commit() *Ptr {
+	t.writable = nil
+	return t.root
+}
+
+func (t *Txn) Root() *Ptr {
+	return t.root
+}
+
+// Get returns the key
+func (t *Txn) Get(k []byte) (interface{}, bool) {
+	return t.db.getNode(t.root).Get(t.db, k)
 }
