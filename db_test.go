@@ -31,6 +31,7 @@ func Test_Tnx(test *testing.T) {
 		test.Fatal("Update failed")
 	}
 	fmt.Println("old:", old)
+
 	old, update = t.Insert([]byte("harry"), "kalogirou")
 	if update == true {
 		test.Fatal("Update failed")
@@ -41,8 +42,33 @@ func Test_Tnx(test *testing.T) {
 		test.Fatal("Commit failed")
 	}
 
-	if v, _ := db.Get([]byte("key")); v != "value" {
-		test.Fatal("Get failed")
+	if v, _ := db.Get([]byte("key")); v != "va" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+	if v, _ := db.Get([]byte("harry")); v != "kalogirou" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+	t = db.Txn()
+	old, update = t.Insert([]byte("harry"), "Kal")
+	if update == false {
+		test.Fatal("Insert failed")
+	}
+
+	// Change should not be visible outside the transaction
+	if v, _ := db.Get([]byte("harry")); v != "kalogirou" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	// Change should not be visible outside the transaction
+	if v, _ := db.Get([]byte("harry")); v != "Kal" {
+		test.Fatalf("Get failed (got %s)", v)
 	}
 }
 

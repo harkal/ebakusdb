@@ -198,7 +198,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		copy(nc.edges, n.edges)
 	}
 
-	t.writable.Add(nc, nil)
+	t.writable.Add(ncPtr, nil)
 	return ncPtr
 }
 
@@ -234,7 +234,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 
 	// No edge, create one
 	if childPtr == nil {
-		nPtr, n, err := t.db.newNode()
+		nnPtr, nn, err := t.db.newNode()
 		if err != nil {
 			panic(err)
 		}
@@ -247,15 +247,15 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		leaf.keyPtr = *t.db.newBytesFromSlice(k)
 		leaf.val = v
 
-		n.leafPtr = leafPtr
+		nn.leafPtr = leafPtr
 
-		n.prefixPtr = t.db.newBytesFromSlice(search)
+		nn.prefixPtr = t.db.newBytesFromSlice(search)
 
 		e := edge{
 			label: search[0],
-			node:  nPtr,
+			node:  nnPtr,
 		}
-		nc := t.writeNode(nPtr, false)
+		nc := t.writeNode(nodePtr, false)
 		t.db.getNode(nc).addEdge(e)
 		return nc, nil, false
 	}
