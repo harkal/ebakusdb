@@ -128,6 +128,15 @@ func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
 	return aPtr, a, nil
 }
 
+func (db *DB) newBytesFromSlice(data []byte) *ByteArray {
+	aPtr, a, err := db.newBytes(uint64(len(data)))
+	if err != nil {
+		panic(err)
+	}
+	copy(a, data)
+	return aPtr
+}
+
 func (db *DB) cloneBytes(bPtr *ByteArray) (*ByteArray, error) {
 	newBPtr, newB, err := db.newBytes(bPtr.Size)
 	if err != nil {

@@ -32,19 +32,19 @@ func (e edges) Sort() {
 }
 
 type leafNode struct {
-	key []byte
-	val interface{}
+	keyPtr ByteArray
+	val    interface{}
 }
 
 type Node struct {
 	RefCountedObject
-	leaf   *leafNode
-	prefix []byte
-	edges  edges
+	leafPtr   *Ptr
+	prefixPtr *ByteArray
+	edges     edges
 }
 
 func (n *Node) isLeaf() bool {
-	return n.leaf != nil
+	return n.leafPtr != nil
 }
 
 func (n *Node) addEdge(e edge) {
@@ -94,12 +94,12 @@ func (n *Node) delEdge(label byte) {
 	}
 }
 
-func (n *Node) LongestPrefix(k []byte) ([]byte, interface{}, bool) {
-	var last *leafNode
+func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
+	var last *Ptr
 	search := k
 	for {
 		if n.isLeaf() {
-			last = n.leaf
+			last = n.leafPtr
 		}
 
 		if len(search) == 0 {
@@ -111,14 +111,16 @@ func (n *Node) LongestPrefix(k []byte) ([]byte, interface{}, bool) {
 			break
 		}
 
-		if bytes.HasPrefix(search, n.prefix) {
-			search = search[len(n.prefix):]
+		prefix := db.getBytes(n.prefixPtr)
+		if bytes.HasPrefix(search, prefix) {
+			search = search[len(prefix):]
 		} else {
 			break
 		}
 	}
 	if last != nil {
-		return last.key, last.val, true
+		l := db.getLeafNode(last)
+		return db.getBytes(&l.keyPtr), l.val, true
 	}
 	return nil, nil, false
 }
@@ -152,11 +154,14 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		panic(err)
 	}
 
-	nc.leaf = n.leaf
+	nc.leafPtr = n.leafPtr
 
-	if n.prefix != nil {
-		nc.prefix = make([]byte, len(n.prefix))
-		copy(nc.prefix, n.prefix)
+	if n.prefixPtr != nil {
+		ncp, err := t.db.cloneBytes(n.prefixPtr)
+		if err != nil {
+			panic(err)
+		}
+		nc.prefixPtr = ncp
 	}
 	if len(n.edges) != 0 {
 		nc.edges = make([]edge, len(n.edges))
@@ -174,16 +179,23 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		var oldVal interface{}
 		didUpdate := false
 		if n.isLeaf() {
-			oldVal = n.leaf.val
+			leaf := t.db.getLeafNode(n.leafPtr)
+			oldVal = leaf.val
 			didUpdate = true
 		}
 
 		ncPtr := t.writeNode(nodePtr, true)
 		nc := t.db.getNode(ncPtr)
-		nc.leaf = &leafNode{
-			key: k,
-			val: v,
+
+		leafPtr, leaf, err := t.db.newLeafNode()
+		if err != nil {
+			panic(err)
 		}
+
+		leaf.keyPtr = *t.db.newBytesFromSlice(k)
+		leaf.val = v
+
+		nc.leafPtr = leafPtr
 		return ncPtr, oldVal, didUpdate
 	}
 
@@ -196,11 +208,18 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		if err != nil {
 			panic(err)
 		}
-		n.leaf = &leafNode{
-			key: k,
-			val: v,
+
+		leafPtr, leaf, err := t.db.newLeafNode()
+		if err != nil {
+			panic(err)
 		}
-		n.prefix = search
+
+		leaf.keyPtr = *t.db.newBytesFromSlice(k)
+		leaf.val = v
+
+		n.leafPtr = leafPtr
+
+		n.prefixPtr = t.db.newBytesFromSlice(search)
 
 		e := edge{
 			label: search[0],
@@ -214,8 +233,9 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	child := t.db.getNode(childPtr)
 
 	// Determine longest prefix of the search key on match
-	commonPrefix := longestPrefix(search, child.prefix)
-	if commonPrefix == len(child.prefix) {
+	childPrefix := t.db.getBytes(child.prefixPtr)
+	commonPrefix := longestPrefix(search, childPrefix)
+	if commonPrefix == len(childPrefix) {
 		search = search[commonPrefix:]
 		newChild, oldVal, didUpdate := t.insert(childPtr, k, search, v)
 		if newChild != nil {
@@ -234,7 +254,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	if err != nil {
 		panic(err)
 	}
-	splitNode.prefix = search[:commonPrefix]
+
+	splitNode.prefixPtr = t.db.newBytesFromSlice(search[:commonPrefix])
 
 	nc := t.db.getNode(ncPtr)
 	nc.replaceEdge(edge{
@@ -245,22 +266,24 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	// Restore the existing child node
 	modChildPtr := t.writeNode(childPtr, false)
 	modChild := t.db.getNode(modChildPtr)
+	pref := t.db.getBytes(modChild.prefixPtr)
 	splitNode.addEdge(edge{
-		label: modChild.prefix[commonPrefix],
+		label: pref[commonPrefix],
 		node:  modChildPtr,
 	})
-	modChild.prefix = modChild.prefix[commonPrefix:]
+	modChild.prefixPtr = t.db.newBytesFromSlice(pref[commonPrefix:])
 
-	// Create a new leaf node
-	leaf := &leafNode{
-		key: k,
-		val: v,
+	leafPtr, leaf, err := t.db.newLeafNode()
+	if err != nil {
+		panic(err)
 	}
+	leaf.keyPtr = *t.db.newBytesFromSlice(k)
+	leaf.val = v
 
 	// If the new key is a subset, add to to this node
 	search = search[commonPrefix:]
 	if len(search) == 0 {
-		splitNode.leaf = leaf
+		splitNode.leafPtr = leafPtr
 		return ncPtr, nil, false
 	}
 
@@ -268,8 +291,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	if err != nil {
 		panic(err)
 	}
-	en.leaf = leaf
-	en.prefix = search
+	en.leafPtr = leafPtr
+	en.prefixPtr = t.db.newBytesFromSlice(search)
 
 	// Create a new edge for the node
 	splitNode.addEdge(edge{
