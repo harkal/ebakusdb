@@ -103,3 +103,17 @@ func (db *DB) newNode() (*Ptr, *Node, error) {
 func (db *DB) getNode(p *Ptr) *Node {
 	return (*Node)(db.allocator.GetPtr(p.Offset))
 }
+
+func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
+	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(ByteArray{}) + uintptr(size)))
+	if err != nil {
+		return nil, nil, err
+	}
+	aPtr := &ByteArray{Offset: offset, Size: size}
+	a := db.getBytes(aPtr)
+	return aPtr, a, nil
+}
+
+func (db *DB) getBytes(b *ByteArray) []byte {
+	return (*[0x7fffff]byte)(db.allocator.GetPtr(b.Offset + uint64(unsafe.Sizeof(ByteArray{}))))[:b.Size]
+}
