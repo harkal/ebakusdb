@@ -13,3 +13,13 @@ func Test_Open(t *testing.T) {
 		t.Fatal("Failed to open db")
 	}
 }
+
+func Test_Tnx(t *testing.T) {
+
+	db, err := ebakusdb.Open("test.db", 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db")
+	}
+
+	db.Txn()
+}

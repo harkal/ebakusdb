@@ -3,6 +3,7 @@ package ebakusdb
 import (
 	"os"
 	"time"
+	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
@@ -27,6 +28,8 @@ type DB struct {
 	readOnly bool
 
 	allocator *balloc.BufferAllocator
+
+	root *Ptr
 }
 
 func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
@@ -47,5 +50,56 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db.allocator = allocator
 
+	db.init()
+
 	return db, nil
+}
+
+func (db *DB) init() error {
+	root, _, err := db.newNode()
+	if err != nil {
+		return err
+	}
+
+	db.root = root
+
+	return nil
+}
+
+func longestPrefix(k1, k2 []byte) int {
+	max := len(k1)
+	if l := len(k2); l < max {
+		max = l
+	}
+	var i int
+	for i = 0; i < max; i++ {
+		if k1[i] != k2[i] {
+			break
+		}
+	}
+	return i
+}
+
+// Txn starts a new transaction that can be used to mutate the tree
+func (db *DB) Txn() *Txn {
+	txn := &Txn{
+		db:   db,
+		root: db.root,
+	}
+	return txn
+}
+
+func (db *DB) newNode() (*Ptr, *Node, error) {
+	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(Node{})))
+	if err != nil {
+		return nil, nil, err
+	}
+	p := &Ptr{Offset: offset}
+	n := db.getNode(p)
+	n.Retain()
+	return p, n, nil
+}
+
+func (db *DB) getNode(p *Ptr) *Node {
+	return (*Node)(db.allocator.GetPtr(p.Offset))
 }
