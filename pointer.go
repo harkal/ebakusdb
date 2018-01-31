@@ -26,3 +26,8 @@ func (p *RefCountedObject) Release() bool {
 func (p *RefCountedObject) GetRefCount() int {
 	return p.refCount
 }
+
+type ByteArray struct {
+	Offset uint64
+	Size   uint64
+}

@@ -282,6 +282,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, v)
 	if newRoot != nil {
+		t.db.getNode(t.root).Release()
 		t.root = newRoot
 	}
 	return oldVal, didUpdate
