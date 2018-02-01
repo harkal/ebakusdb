@@ -126,7 +126,7 @@ func Test_Get(test *testing.T) {
 		test.Fatal("incorrect refcount")
 	}
 
-	_, update := t.Insert([]byte("key"), []byte("value the big shit of the universe dude"))
+	_, update := t.Insert([]byte("key"), []byte("value the big universe dude"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}

@@ -1,7 +1,6 @@
 package ebakusdb
 
 import (
-	"fmt"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
@@ -28,12 +27,9 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 		return false
 	}
 	n := nPtr.getNode(mm)
-	if n.refCount == 0 {
-		fmt.Printf("ERROR: node with refs: %d\n", n.refCount)
-	}
 	n.refCount--
 
-	fmt.Printf("Deref node with refs: %d\n", n.refCount)
+	//fmt.Printf("Deref node with refs: %d\n", n.refCount)
 
 	if n.refCount <= 0 {
 		n.prefixPtr.Release(mm)

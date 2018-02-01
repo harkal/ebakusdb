@@ -33,7 +33,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		readOnly: options.ReadOnly,
 	}
 
-	buffer := make([]byte, 512*1024*1024)
+	buffer := make([]byte, 1024*1024*1024)
 
 	allocator, err := balloc.NewBufferAllocator(buffer)
 	if err != nil {
@@ -72,6 +72,18 @@ func longestPrefix(k1, k2 []byte) int {
 	return i
 }
 
+func encodeKey(key []byte) []byte {
+	ret := make([]byte, len(key)*2)
+	i := 0
+	for _, k := range key {
+		ret[i] = k & 0xf
+		i++
+		ret[i] = k >> 4
+		i++
+	}
+	return ret
+}
+
 // Txn starts a new transaction that can be used to mutate the tree
 func (db *DB) Txn() *Txn {
 	txn := &Txn{
@@ -83,5 +95,6 @@ func (db *DB) Txn() *Txn {
 }
 
 func (db *DB) Get(k []byte) (*[]byte, bool) {
+	k = encodeKey(k)
 	return db.root.getNode(db.allocator).Get(db, k)
 }

@@ -9,7 +9,7 @@ import (
 type Node struct {
 	RefCountedObject
 	prefixPtr ByteArray
-	edges     [256]Ptr // Nodes
+	edges     [16]Ptr // Nodes
 
 	// leaf case
 	keyPtr ByteArray
@@ -243,6 +243,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	mm := t.db.allocator
+	k = encodeKey(k)
 	vPtr := *newBytesFromSlice(mm, v)
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, vPtr)
 	vPtr.Release(mm)
@@ -271,6 +272,7 @@ func (t *Txn) Root() *Ptr {
 
 // Get returns the key
 func (t *Txn) Get(k []byte) (*[]byte, bool) {
+	k = encodeKey(k)
 	return t.root.getNode(t.db.allocator).Get(t.db, k)
 }
 

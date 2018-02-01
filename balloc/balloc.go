@@ -2,7 +2,6 @@ package balloc
 
 import (
 	"errors"
-	"fmt"
 	"unsafe"
 )
 
@@ -61,7 +60,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		return 0, ErrOutOfMemory
 	}
 
-	fmt.Printf("+ allocate %d bytes\n", size)
+	//fmt.Printf("+ allocate %d bytes\n", size)
 
 	// Ensure alignement
 	size = alignSize(size)
@@ -75,7 +74,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 }
 
 func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
-	fmt.Printf("- Deallocate %d bytes\n", size)
+	//fmt.Printf("- Deallocate %d bytes\n", size)
 	size = alignSize(size)
 	b.TotalFree += size
 	return nil
