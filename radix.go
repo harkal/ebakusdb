@@ -2,34 +2,9 @@ package ebakusdb
 
 import (
 	"bytes"
-	"sort"
 
 	"github.com/hashicorp/golang-lru/simplelru"
 )
-
-// edge is used to represent an edge node
-type edge struct {
-	label byte
-	node  *Ptr
-}
-
-type edges []edge
-
-func (e edges) Len() int {
-	return len(e)
-}
-
-func (e edges) Less(i, j int) bool {
-	return e[i].label < e[j].label
-}
-
-func (e edges) Swap(i, j int) {
-	e[i], e[j] = e[j], e[i]
-}
-
-func (e edges) Sort() {
-	sort.Sort(e)
-}
 
 type leafNode struct {
 	keyPtr ByteArray
@@ -40,7 +15,7 @@ type Node struct {
 	RefCountedObject
 	leafPtr   *Ptr
 	prefixPtr *ByteArray
-	edges     edges
+	edges     [256]*Ptr // Nodes
 }
 
 func (n *Node) isLeaf() bool {
@@ -59,7 +34,7 @@ func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
 		}
 
 		// Look for an edge
-		_, nPtr := n.getEdge(search[0])
+		nPtr := n.edges[search[0]]
 		if nPtr == nil {
 			break
 		}
@@ -77,53 +52,6 @@ func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
 	return nil, false
 }
 
-func (n *Node) addEdge(e edge) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= e.label
-	})
-	n.edges = append(n.edges, e)
-	if idx != num {
-		copy(n.edges[idx+1:], n.edges[idx:num])
-		n.edges[idx] = e
-	}
-}
-
-func (n *Node) replaceEdge(e edge) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= e.label
-	})
-	if idx < num && n.edges[idx].label == e.label {
-		n.edges[idx].node = e.node
-		return
-	}
-	panic("replacing missing edge")
-}
-
-func (n *Node) getEdge(label byte) (int, *Ptr) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= label
-	})
-	if idx < num && n.edges[idx].label == label {
-		return idx, n.edges[idx].node
-	}
-	return -1, nil
-}
-
-func (n *Node) delEdge(label byte) {
-	num := len(n.edges)
-	idx := sort.Search(num, func(i int) bool {
-		return n.edges[i].label >= label
-	})
-	if idx < num && n.edges[idx].label == label {
-		copy(n.edges[idx:], n.edges[idx+1:])
-		n.edges[len(n.edges)-1] = edge{}
-		n.edges = n.edges[:len(n.edges)-1]
-	}
-}
-
 func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 	var last *Ptr
 	search := k
@@ -136,7 +64,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 			break
 		}
 
-		_, nPtr := n.getEdge(search[0])
+		nPtr := n.edges[search[0]]
 		if nPtr == nil {
 			break
 		}
@@ -219,9 +147,14 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		}
 		nc.prefixPtr = ncp
 	}
-	if len(n.edges) != 0 {
-		nc.edges = make([]edge, len(n.edges))
-		copy(nc.edges, n.edges)
+
+	nc.edges = n.edges
+
+	for _, edgeNode := range nc.edges {
+		if edgeNode == nil {
+			continue
+		}
+		t.db.getNode(edgeNode).Retain()
 	}
 
 	t.writable.Add(ncPtr, nil)
@@ -255,8 +188,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		return ncPtr, oldVal, didUpdate
 	}
 
-	// Look for the edge
-	idx, childPtr := n.getEdge(search[0])
+	edgeLabel := search[0]
+	childPtr := n.edges[edgeLabel]
 
 	// No edge, create one
 	if childPtr == nil {
@@ -277,12 +210,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 
 		nn.prefixPtr = t.db.newBytesFromSlice(search)
 
-		e := edge{
-			label: search[0],
-			node:  nnPtr,
-		}
 		nc := t.writeNode(nodePtr, false)
-		t.db.getNode(nc).addEdge(e)
+		t.db.getNode(nc).edges[edgeLabel] = nnPtr
 		return nc, nil, false
 	}
 
@@ -293,11 +222,11 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	commonPrefix := longestPrefix(search, childPrefix)
 	if commonPrefix == len(childPrefix) {
 		search = search[commonPrefix:]
-		newChild, oldVal, didUpdate := t.insert(childPtr, k, search, v)
-		if newChild != nil {
+		newChildPtr, oldVal, didUpdate := t.insert(childPtr, k, search, v)
+		if newChildPtr != nil {
 			ncPtr := t.writeNode(nodePtr, false)
 			nc := t.db.getNode(ncPtr)
-			nc.edges[idx].node = newChild
+			nc.edges[edgeLabel] = newChildPtr
 			return ncPtr, oldVal, didUpdate
 		}
 		return nil, oldVal, didUpdate
@@ -314,19 +243,16 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	splitNode.prefixPtr = t.db.newBytesFromSlice(search[:commonPrefix])
 
 	nc := t.db.getNode(ncPtr)
-	nc.replaceEdge(edge{
-		label: search[0],
-		node:  splitNodePtr,
-	})
+	t.db.getNode(nc.edges[search[0]]).Release()
+	nc.edges[search[0]] = splitNodePtr
 
 	// Restore the existing child node
 	modChildPtr := t.writeNode(childPtr, false)
 	modChild := t.db.getNode(modChildPtr)
 	pref := t.db.getBytes(modChild.prefixPtr)
-	splitNode.addEdge(edge{
-		label: pref[commonPrefix],
-		node:  modChildPtr,
-	})
+
+	splitNode.edges[pref[commonPrefix]] = modChildPtr
+
 	modChild.prefixPtr = t.db.newBytesFromSlice(pref[commonPrefix:])
 
 	leafPtr, leaf, err := t.db.newLeafNode()
@@ -350,11 +276,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	en.leafPtr = leafPtr
 	en.prefixPtr = t.db.newBytesFromSlice(search)
 
-	// Create a new edge for the node
-	splitNode.addEdge(edge{
-		label: search[0],
-		node:  enPtr,
-	})
+	splitNode.edges[search[0]] = enPtr
+
 	return ncPtr, nil, false
 }
 
