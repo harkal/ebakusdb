@@ -3,6 +3,7 @@ package ebakusdb
 import (
 	"bytes"
 
+	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -82,6 +83,10 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		return last.keyPtr.getBytes(mm), last.valPtr.getBytes(mm), true
 	}
 	return nil, nil, false
+}
+
+func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
+	return &Iterator{node: n, mm: mm}
 }
 
 const defaultWritableCache = 8192

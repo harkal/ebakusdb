@@ -354,3 +354,51 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 		t.Fatal("Failed to release")
 	}
 }
+
+func Test_Iterator(test *testing.T) {
+
+	db, err := Open("test.db", 0, nil)
+	if err != nil || db == nil {
+		test.Fatal("Failed to open db")
+	}
+	mm := db.allocator
+
+	t := db.Txn()
+
+	if db.root.getNode(mm).refCount != 2 {
+		test.Fatal("incorrect refcount")
+	}
+
+	t.Insert([]byte("Harry"), []byte("value the big universe dude"))
+	t.Insert([]byte("Kalogirou"), []byte("this is a last name"))
+	t.Insert([]byte("Anna"), []byte("Easy name"))
+	t.Insert([]byte("Alexiou"), []byte("Girl"))
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	if v, _ := db.Get([]byte("Kalogirou")); string(*v) != "this is a last name" {
+		test.Fatal("Get failed")
+	}
+
+	iter := db.Iter()
+	iter.SeekPrefix([]byte("A"))
+
+	k, v, end := iter.Next()
+	if string(k) != "Alexiou" || string(v) != "Girl" {
+		test.Fatal("Get failed")
+	}
+
+	k, v, end = iter.Next()
+	if string(k) != "Anna" || string(v) != "Easy name" {
+		test.Fatal("Get failed")
+	}
+
+	k, v, end = iter.Next()
+	if string(k) != "" || end != false {
+		test.Fatal("Get failed")
+	}
+
+}

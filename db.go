@@ -84,6 +84,23 @@ func encodeKey(key []byte) []byte {
 	return ret
 }
 
+func decodeKey(key []byte) []byte {
+	if len(key)&1 == 1 {
+		return nil
+	}
+	ret := make([]byte, len(key)/2)
+
+	j := 0
+	for i := 0; i < len(key)/2; i++ {
+		k := key[j]
+		j++
+		k |= key[j] << 4
+		j++
+		ret[i] = k
+	}
+	return ret
+}
+
 // Txn starts a new transaction that can be used to mutate the tree
 func (db *DB) Txn() *Txn {
 	txn := &Txn{
@@ -97,4 +114,9 @@ func (db *DB) Txn() *Txn {
 func (db *DB) Get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
 	return db.root.getNode(db.allocator).Get(db, k)
+}
+
+func (db *DB) Iter() *Iterator {
+	iter := db.root.getNode(db.allocator).Iterator(db.allocator)
+	return iter
 }
