@@ -13,20 +13,21 @@ type Node struct {
 
 	// leaf case
 	keyPtr ByteArray
-	val    interface{}
+	valPtr ByteArray
 }
 
 func (n *Node) isLeaf() bool {
 	return !n.keyPtr.isNull()
 }
 
-func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
+func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
 	search := k
 	for {
 		// Check for key exhaustion
 		if len(search) == 0 {
 			if n.isLeaf() {
-				return n.val, true
+				b := db.getBytes(&n.valPtr)
+				return &b, true
 			}
 			break
 		}
@@ -76,7 +77,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		}
 	}
 	if last != nil {
-		return db.getBytes(&last.keyPtr), last.val, true
+		return db.getBytes(&last.keyPtr), db.getBytes(&last.valPtr), true
 	}
 	return nil, nil, false
 }
@@ -137,7 +138,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 	}
 
 	nc.keyPtr = n.keyPtr
-	nc.val = n.val
+	nc.valPtr = n.valPtr
 
 	if !n.prefixPtr.isNull() {
 		ncp, err := t.db.cloneBytes(&n.prefixPtr)
@@ -160,14 +161,15 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 	return ncPtr
 }
 
-func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, interface{}, bool) {
+func (t *Txn) insert(nodePtr *Ptr, k, search, v []byte) (*Ptr, *[]byte, bool) {
 	n := t.db.getNode(nodePtr)
 	// Handle key exhaustion
 	if len(search) == 0 {
-		var oldVal interface{}
+		var oldVal *[]byte
 		didUpdate := false
 		if n.isLeaf() {
-			oldVal = n.val
+			oldValSlice := t.db.getBytes(&n.valPtr)
+			oldVal = &oldValSlice
 			didUpdate = true
 		}
 
@@ -175,7 +177,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		nc := t.db.getNode(ncPtr)
 
 		nc.keyPtr = *t.db.newBytesFromSlice(k)
-		nc.val = v
+		nc.valPtr = *t.db.newBytesFromSlice(v)
 
 		return ncPtr, oldVal, didUpdate
 	}
@@ -191,7 +193,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		}
 
 		nn.keyPtr = *t.db.newBytesFromSlice(k)
-		nn.val = v
+		nn.valPtr = *t.db.newBytesFromSlice(v)
 		nn.prefixPtr = *t.db.newBytesFromSlice(search)
 
 		nc := t.writeNode(nodePtr, false)
@@ -243,7 +245,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	search = search[commonPrefix:]
 	if len(search) == 0 {
 		splitNode.keyPtr = *t.db.newBytesFromSlice(k)
-		splitNode.val = v
+		splitNode.valPtr = *t.db.newBytesFromSlice(v)
 		return ncPtr, nil, false
 	}
 
@@ -252,7 +254,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		panic(err)
 	}
 	en.keyPtr = *t.db.newBytesFromSlice(k)
-	en.val = v
+	en.valPtr = *t.db.newBytesFromSlice(v)
 	en.prefixPtr = *t.db.newBytesFromSlice(search)
 
 	splitNode.edges[search[0]] = *enPtr
@@ -260,7 +262,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	return ncPtr, nil, false
 }
 
-func (t *Txn) Insert(k []byte, v interface{}) (interface{}, bool) {
+func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, v)
 	if newRoot != nil {
 		t.db.getNode(t.root).Release()
@@ -279,6 +281,6 @@ func (t *Txn) Root() *Ptr {
 }
 
 // Get returns the key
-func (t *Txn) Get(k []byte) (interface{}, bool) {
+func (t *Txn) Get(k []byte) (*[]byte, bool) {
 	return t.db.getNode(t.root).Get(t.db, k)
 }

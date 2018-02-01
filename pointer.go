@@ -32,6 +32,7 @@ func (p *RefCountedObject) GetRefCount() int {
 }
 
 type ByteArray struct {
+	RefCountedObject
 	Offset uint64
 	Size   uint64
 }

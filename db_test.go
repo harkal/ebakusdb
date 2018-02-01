@@ -50,23 +50,23 @@ func Test_Tnx(test *testing.T) {
 	}
 
 	t := db.Txn()
-	old, update := t.Insert([]byte("key"), "value")
+	old, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
 	fmt.Println("old:", old)
-	old, update = t.Insert([]byte("key"), "va")
-	if update == false || old != "value" {
+	old, update = t.Insert([]byte("key"), []byte("va"))
+	if update == false || string(*old) != "value" {
 		test.Fatal("Update failed")
 	}
 	fmt.Println("old:", old)
 
-	old, update = t.Insert([]byte("harry"), "kalogirou")
+	old, update = t.Insert([]byte("harry"), []byte("kalogirou"))
 	if update == true {
 		test.Fatal("Update failed")
 	}
 
-	if v, _ := t.Get([]byte("key")); v != "va" {
+	if v, _ := t.Get([]byte("key")); string(*v) != "va" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
@@ -75,22 +75,22 @@ func Test_Tnx(test *testing.T) {
 		test.Fatal("Commit failed")
 	}
 
-	if v, _ := db.Get([]byte("key")); v != "va" {
+	if v, _ := db.Get([]byte("key")); string(*v) != "va" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
-	if v, _ := db.Get([]byte("harry")); v != "kalogirou" {
+	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
 	t = db.Txn()
-	old, update = t.Insert([]byte("harry"), "Kal")
+	old, update = t.Insert([]byte("harry"), []byte("Kal"))
 	if update == false {
 		test.Fatal("Insert failed")
 	}
 
 	// Change should not be visible outside the transaction
-	if v, _ := db.Get([]byte("harry")); v != "kalogirou" {
+	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
@@ -100,7 +100,7 @@ func Test_Tnx(test *testing.T) {
 	}
 
 	// Change should not be visible outside the transaction
-	if v, _ := db.Get([]byte("harry")); v != "Kal" {
+	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 }
@@ -113,7 +113,7 @@ func Test_Get(test *testing.T) {
 	}
 
 	t := db.Txn()
-	_, update := t.Insert([]byte("key"), "value")
+	_, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
@@ -122,7 +122,7 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Commit failed")
 	}
 
-	if v, _ := db.Get([]byte("key")); v != "value" {
+	if v, _ := db.Get([]byte("key")); string(*v) != "value" {
 		test.Fatal("Get failed")
 	}
 
@@ -134,20 +134,20 @@ func Test_InsertGet(t *testing.T) {
 		t.Fatal("Failed to open db")
 	}
 
-	ins := func(key, val string) {
+	ins := func(key string, val []byte) {
 		txn := db.Txn()
-		_, update := txn.Insert([]byte(key), val)
+		_, update := txn.Insert([]byte(key), []byte(val))
 		if update == true {
 			t.Fatal("Insert failed")
 		}
 		db.Commit(txn)
 	}
 
-	data := make(map[string]string)
+	data := make(map[string][]byte)
 
 	for i := 0; i < 50000; i++ {
 		k := RandStringBytesMaskImprSrc(64)
-		v := RandStringBytesMaskImprSrc(120)
+		v := []byte(RandStringBytesMaskImprSrc(120))
 		data[k] = v
 	}
 
@@ -157,7 +157,7 @@ func Test_InsertGet(t *testing.T) {
 
 	for k, v := range data {
 		dv, found := db.Get([]byte(k))
-		if found == false || dv != v {
+		if found == false || string(*dv) != string(v) {
 			t.Fatal("Failed")
 		}
 	}

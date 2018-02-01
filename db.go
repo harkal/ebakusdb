@@ -111,7 +111,7 @@ func (db *DB) getNode(p *Ptr) *Node {
 	return (*Node)(db.allocator.GetPtr(p.Offset))
 }
 
-func (db *DB) Get(k []byte) (interface{}, bool) {
+func (db *DB) Get(k []byte) (*[]byte, bool) {
 	return db.getNode(db.root).Get(db, k)
 }
 

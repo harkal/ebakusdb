@@ -14,6 +14,13 @@ const maxBufferSize = 0x8000000000
 const alignmentBytes = 8
 const alignmentBytesMinusOne = alignmentBytes - 1
 
+type MemoryManager interface {
+	Allocate(size uint64) (uint64, error)
+	Deallocate(pos uint64) error
+
+	GetPtr(pos uint64) unsafe.Pointer
+}
+
 // BufferAllocator allocates memory in a preallocated buffer
 type BufferAllocator struct {
 	bufferRef     []byte
