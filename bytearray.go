@@ -36,8 +36,6 @@ func (bPtr *ByteArray) cloneBytes(mm balloc.MemoryManager) (*ByteArray, error) {
 
 	copy(newB, old)
 
-	*bPtr.getBytesRefCount(mm) = 1
-
 	return newBPtr, nil
 }
 
@@ -50,10 +48,16 @@ func (b *ByteArray) getBytesRefCount(mm balloc.MemoryManager) *int {
 }
 
 func (b *ByteArray) BytesRetain(mm balloc.MemoryManager) {
+	if b.Offset == 0 {
+		return
+	}
 	*b.getBytesRefCount(mm)++
 }
 
 func (b *ByteArray) BytesRelease(mm balloc.MemoryManager) {
+	if b.Offset == 0 {
+		return
+	}
 	count := b.getBytesRefCount(mm)
 	*count--
 	if *count == 0 {

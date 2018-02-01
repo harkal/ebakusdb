@@ -112,11 +112,29 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Failed to open db")
 	}
 
+	if db.getNode(db.root).refCount != 1 {
+		test.Fatal("incorrect refcount")
+	}
+
 	t := db.Txn()
+
+	if db.getNode(db.root).refCount != 2 {
+		test.Fatal("incorrect refcount")
+	}
+
 	_, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
+
+	if db.getNode(db.root).refCount != 1 {
+		test.Fatal("incorrect refcount")
+	}
+
+	if db.getNode(t.root).refCount != 1 {
+		test.Fatal("incorrect refcount")
+	}
+
 	err = db.Commit(t)
 	if err != nil {
 		test.Fatal("Commit failed")
@@ -128,7 +146,7 @@ func Test_Get(test *testing.T) {
 
 }
 
-func Test_GetKeySubset(test *testing.T) {
+func Test_Get_KeySubset(test *testing.T) {
 
 	db, err := Open("test.db", 0, nil)
 	if err != nil || db == nil {

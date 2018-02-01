@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -86,25 +87,18 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 }
 
 func (n *Node) Release(mm balloc.MemoryManager) bool {
+	if n.refCount == 0 {
+		fmt.Printf("ERROR: node with refs: %d\n", n.refCount)
+	}
 	n.refCount--
 
+	fmt.Printf("Deref node with refs: %d\n", n.refCount)
+
 	if n.refCount <= 0 {
-		if !n.prefixPtr.isNull() {
-			if err := mm.Deallocate(n.prefixPtr.Offset, n.prefixPtr.Size); err != nil {
-				panic(err)
-			}
-		}
-		if !n.keyPtr.isNull() {
-			if err := mm.Deallocate(n.keyPtr.Offset, n.keyPtr.Size); err != nil {
-				panic(err)
-			}
-		}
-		if !n.valPtr.isNull() {
-			if err := mm.Deallocate(n.keyPtr.Offset, n.keyPtr.Size); err != nil {
-				panic(err)
-			}
-		}
-		return false
+		n.prefixPtr.BytesRelease(mm)
+		n.keyPtr.BytesRelease(mm)
+		n.valPtr.BytesRelease(mm)
+		return true
 	}
 
 	return false
@@ -139,16 +133,14 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		panic(err)
 	}
 
-	nc.keyPtr = n.keyPtr
-	nc.valPtr = n.valPtr
+	mm := t.db.allocator
 
-	if !n.prefixPtr.isNull() {
-		ncp, err := n.prefixPtr.cloneBytes(t.db.allocator)
-		if err != nil {
-			panic(err)
-		}
-		nc.prefixPtr = *ncp
-	}
+	nc.keyPtr = n.keyPtr
+	nc.keyPtr.BytesRetain(mm)
+	nc.valPtr = n.valPtr
+	nc.valPtr.BytesRetain(mm)
+	nc.prefixPtr = n.prefixPtr
+	nc.prefixPtr.BytesRetain(mm)
 
 	nc.edges = n.edges
 
@@ -226,6 +218,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	// Split the node
 	ncPtr := t.writeNode(nodePtr, false)
+	nc := t.db.getNode(ncPtr)
 
 	splitNodePtr, splitNode, err := t.db.newNode()
 	if err != nil {
@@ -234,7 +227,6 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
-	nc := t.db.getNode(ncPtr)
 	t.db.getNode(&nc.edges[search[0]]).Release(mm)
 	nc.edges[search[0]] = *splitNodePtr
 
@@ -243,7 +235,6 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	modChild := t.db.getNode(modChildPtr)
 	pref := modChild.prefixPtr.getBytes(mm)
 
-	t.db.getNode(&splitNode.edges[pref[commonPrefix]]).Release(mm)
 	splitNode.edges[pref[commonPrefix]] = *modChildPtr
 
 	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
@@ -266,7 +257,6 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	vPtr.BytesRetain(mm)
 	en.prefixPtr = *newBytesFromSlice(mm, search)
 
-	t.db.getNode(&splitNode.edges[search[0]]).Release(mm)
 	splitNode.edges[search[0]] = *enPtr
 
 	return ncPtr, nil, false
