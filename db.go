@@ -84,7 +84,7 @@ func (db *DB) Txn() *Txn {
 
 func (db *DB) Commit(txn *Txn) error {
 	newRootPtr := txn.Commit()
-	db.getNode(db.root).Release()
+	db.getNode(db.root).Release(db.allocator)
 	db.root = newRootPtr
 	return nil
 }
@@ -106,59 +106,4 @@ func (db *DB) getNode(p *Ptr) *Node {
 
 func (db *DB) Get(k []byte) (*[]byte, bool) {
 	return db.getNode(db.root).Get(db, k)
-}
-
-func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
-	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(int(0)) + uintptr(size)))
-	if err != nil {
-		return nil, nil, err
-	}
-	aPtr := &ByteArray{Offset: offset, Size: size}
-	db.BytesRetain(aPtr)
-	a := db.getBytes(aPtr)
-	return aPtr, a, nil
-}
-
-func (db *DB) newBytesFromSlice(data []byte) *ByteArray {
-	aPtr, a, err := db.newBytes(uint64(len(data)))
-	if err != nil {
-		panic(err)
-	}
-	copy(a, data)
-	return aPtr
-}
-
-func (db *DB) cloneBytes(bPtr *ByteArray) (*ByteArray, error) {
-	newBPtr, newB, err := db.newBytes(bPtr.Size)
-	if err != nil {
-		return nil, err
-	}
-
-	old := db.getBytes(bPtr)
-
-	copy(newB, old)
-
-	*db.getBytesRefCount(bPtr) = 1
-
-	return newBPtr, nil
-}
-
-func (db *DB) getBytes(b *ByteArray) []byte {
-	return (*[0x7fffff]byte)(db.allocator.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
-}
-
-func (db *DB) getBytesRefCount(b *ByteArray) *int {
-	return (*int)(db.allocator.GetPtr(b.Offset))
-}
-
-func (db *DB) BytesRetain(b *ByteArray) {
-	*db.getBytesRefCount(b)++
-}
-
-func (db *DB) BytesRelease(b *ByteArray) {
-	count := db.getBytesRefCount(b)
-	*count--
-	if *count == 0 {
-		db.allocator.Deallocate(b.Offset, b.Size)
-	}
 }

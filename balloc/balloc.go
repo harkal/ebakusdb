@@ -16,7 +16,7 @@ const alignmentBytesMinusOne = alignmentBytes - 1
 
 type MemoryManager interface {
 	Allocate(size uint64) (uint64, error)
-	Deallocate(pos uint64) error
+	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
 }

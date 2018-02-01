@@ -3,6 +3,7 @@ package ebakusdb
 import (
 	"bytes"
 
+	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -21,12 +22,13 @@ func (n *Node) isLeaf() bool {
 }
 
 func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
+	mm := db.allocator
 	search := k
 	for {
 		// Check for key exhaustion
 		if len(search) == 0 {
 			if n.isLeaf() {
-				b := db.getBytes(&n.valPtr)
+				b := n.valPtr.getBytes(mm)
 				return &b, true
 			}
 			break
@@ -41,7 +43,7 @@ func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
 		n = db.getNode(nPtr)
 
 		// Consume the search prefix
-		nprefix := db.getBytes(&n.prefixPtr)
+		nprefix := n.prefixPtr.getBytes(mm)
 		if bytes.HasPrefix(search, nprefix) {
 			search = search[n.prefixPtr.Size:]
 		} else {
@@ -52,6 +54,7 @@ func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
 }
 
 func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
+	mm := db.allocator
 	var last *Node
 	search := k
 	for {
@@ -69,7 +72,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		}
 		n = db.getNode(&nPtr)
 
-		prefix := db.getBytes(&n.prefixPtr)
+		prefix := n.prefixPtr.getBytes(mm)
 		if bytes.HasPrefix(search, prefix) {
 			search = search[len(prefix):]
 		} else {
@@ -77,27 +80,27 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		}
 	}
 	if last != nil {
-		return db.getBytes(&last.keyPtr), db.getBytes(&last.valPtr), true
+		return last.keyPtr.getBytes(mm), last.valPtr.getBytes(mm), true
 	}
 	return nil, nil, false
 }
 
-func (n *Node) Release() bool {
-	return false
-}
-
-/*
-func (n *Node) Release(db *DB) bool {
+func (n *Node) Release(mm balloc.MemoryManager) bool {
 	n.refCount--
 
 	if n.refCount <= 0 {
-		if n.prefixPtr != nil {
-			if err := db.allocator.Deallocate(n.prefixPtr.Offset); err != nil {
+		if !n.prefixPtr.isNull() {
+			if err := mm.Deallocate(n.prefixPtr.Offset, n.prefixPtr.Size); err != nil {
 				panic(err)
 			}
 		}
-		if n.leafPtr != nil {
-			if err := db.allocator.Deallocate(n.leafPtr.Offset); err != nil {
+		if !n.keyPtr.isNull() {
+			if err := mm.Deallocate(n.keyPtr.Offset, n.keyPtr.Size); err != nil {
+				panic(err)
+			}
+		}
+		if !n.valPtr.isNull() {
+			if err := mm.Deallocate(n.keyPtr.Offset, n.keyPtr.Size); err != nil {
 				panic(err)
 			}
 		}
@@ -106,7 +109,6 @@ func (n *Node) Release(db *DB) bool {
 
 	return false
 }
-*/
 
 const defaultWritableCache = 8192
 
@@ -141,7 +143,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 	nc.valPtr = n.valPtr
 
 	if !n.prefixPtr.isNull() {
-		ncp, err := t.db.cloneBytes(&n.prefixPtr)
+		ncp, err := n.prefixPtr.cloneBytes(t.db.allocator)
 		if err != nil {
 			panic(err)
 		}
@@ -162,6 +164,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 }
 
 func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
+	mm := t.db.allocator
 	n := t.db.getNode(nodePtr)
 	// Handle key exhaustion
 	if len(search) == 0 {
@@ -171,15 +174,15 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 			didUpdate = true
 
 			oldVal = &n.valPtr
-			t.db.BytesRetain(oldVal)
+			oldVal.BytesRetain(mm)
 		}
 
 		ncPtr := t.writeNode(nodePtr, true)
 		nc := t.db.getNode(ncPtr)
 
-		nc.keyPtr = *t.db.newBytesFromSlice(k)
+		nc.keyPtr = *newBytesFromSlice(mm, k)
 		nc.valPtr = vPtr
-		t.db.BytesRetain(&nc.valPtr)
+		nc.valPtr.BytesRetain(mm)
 
 		return ncPtr, oldVal, didUpdate
 	}
@@ -194,10 +197,10 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 			panic(err)
 		}
 
-		nn.keyPtr = *t.db.newBytesFromSlice(k)
+		nn.keyPtr = *newBytesFromSlice(mm, k)
 		nn.valPtr = vPtr
-		t.db.BytesRetain(&nn.valPtr)
-		nn.prefixPtr = *t.db.newBytesFromSlice(search)
+		nn.valPtr.BytesRetain(mm)
+		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := t.writeNode(nodePtr, false)
 		t.db.getNode(nc).edges[edgeLabel] = *nnPtr
@@ -207,7 +210,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	child := t.db.getNode(&childPtr)
 
 	// Determine longest prefix of the search key on match
-	childPrefix := t.db.getBytes(&child.prefixPtr)
+	childPrefix := child.prefixPtr.getBytes(mm)
 	commonPrefix := longestPrefix(search, childPrefix)
 	if commonPrefix == len(childPrefix) {
 		search = search[commonPrefix:]
@@ -229,28 +232,28 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		panic(err)
 	}
 
-	splitNode.prefixPtr = *t.db.newBytesFromSlice(search[:commonPrefix])
+	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
 	nc := t.db.getNode(ncPtr)
-	t.db.getNode(&nc.edges[search[0]]).Release()
+	t.db.getNode(&nc.edges[search[0]]).Release(mm)
 	nc.edges[search[0]] = *splitNodePtr
 
 	// Restore the existing child node
 	modChildPtr := t.writeNode(&childPtr, false)
 	modChild := t.db.getNode(modChildPtr)
-	pref := t.db.getBytes(&modChild.prefixPtr)
+	pref := modChild.prefixPtr.getBytes(mm)
 
-	t.db.getNode(&splitNode.edges[pref[commonPrefix]]).Release()
+	t.db.getNode(&splitNode.edges[pref[commonPrefix]]).Release(mm)
 	splitNode.edges[pref[commonPrefix]] = *modChildPtr
 
-	modChild.prefixPtr = *t.db.newBytesFromSlice(pref[commonPrefix:])
+	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
 
 	// If the new key is a subset, add to to this node
 	search = search[commonPrefix:]
 	if len(search) == 0 {
-		splitNode.keyPtr = *t.db.newBytesFromSlice(k)
+		splitNode.keyPtr = *newBytesFromSlice(mm, k)
 		splitNode.valPtr = vPtr
-		t.db.BytesRetain(&vPtr)
+		vPtr.BytesRetain(mm)
 		return ncPtr, nil, false
 	}
 
@@ -258,23 +261,24 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	if err != nil {
 		panic(err)
 	}
-	en.keyPtr = *t.db.newBytesFromSlice(k)
+	en.keyPtr = *newBytesFromSlice(mm, k)
 	en.valPtr = vPtr
-	t.db.BytesRetain(&vPtr)
-	en.prefixPtr = *t.db.newBytesFromSlice(search)
+	vPtr.BytesRetain(mm)
+	en.prefixPtr = *newBytesFromSlice(mm, search)
 
-	t.db.getNode(&splitNode.edges[search[0]]).Release()
+	t.db.getNode(&splitNode.edges[search[0]]).Release(mm)
 	splitNode.edges[search[0]] = *enPtr
 
 	return ncPtr, nil, false
 }
 
 func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
-	vPtr := *t.db.newBytesFromSlice(v)
+	mm := t.db.allocator
+	vPtr := *newBytesFromSlice(mm, v)
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, vPtr)
-	t.db.BytesRelease(&vPtr)
+	vPtr.BytesRelease(mm)
 	if newRoot != nil {
-		t.db.getNode(t.root).Release()
+		t.db.getNode(t.root).Release(mm)
 		t.root = newRoot
 	}
 
@@ -283,7 +287,7 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 
 	}
 
-	oVal := t.db.getBytes(oldVal)
+	oVal := oldVal.getBytes(mm)
 	return &oVal, didUpdate
 }
 
