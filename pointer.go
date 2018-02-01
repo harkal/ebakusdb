@@ -23,15 +23,6 @@ func (p *RefCountedObject) Retain() {
 	p.refCount++
 }
 
-func (p *RefCountedObject) Release() bool {
-	p.refCount--
-	return p.refCount == 0
-}
-
-func (p *RefCountedObject) GetRefCount() int {
-	return p.refCount
-}
-
 type ByteArray struct {
 	Offset uint64
 	Size   uint64
