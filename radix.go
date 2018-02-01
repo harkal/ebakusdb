@@ -6,20 +6,18 @@ import (
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
-type leafNode struct {
-	keyPtr ByteArray
+type Node struct {
+	RefCountedObject
+	prefixPtr *ByteArray
+	edges     [256]*Ptr // Nodes
+
+	// leaf case
+	keyPtr *ByteArray
 	val    interface{}
 }
 
-type Node struct {
-	RefCountedObject
-	leafPtr   *Ptr
-	prefixPtr *ByteArray
-	edges     [256]*Ptr // Nodes
-}
-
 func (n *Node) isLeaf() bool {
-	return n.leafPtr != nil
+	return n.keyPtr != nil
 }
 
 func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
@@ -28,7 +26,7 @@ func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
 		// Check for key exhaustion
 		if len(search) == 0 {
 			if n.isLeaf() {
-				return db.getLeafNode(n.leafPtr).val, true
+				return n.val, true
 			}
 			break
 		}
@@ -53,11 +51,11 @@ func (n *Node) Get(db *DB, k []byte) (interface{}, bool) {
 }
 
 func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
-	var last *Ptr
+	var last *Node
 	search := k
 	for {
 		if n.isLeaf() {
-			last = n.leafPtr
+			last = n
 		}
 
 		if len(search) == 0 {
@@ -68,6 +66,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		if nPtr == nil {
 			break
 		}
+		n = db.getNode(nPtr)
 
 		prefix := db.getBytes(n.prefixPtr)
 		if bytes.HasPrefix(search, prefix) {
@@ -77,8 +76,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		}
 	}
 	if last != nil {
-		l := db.getLeafNode(last)
-		return db.getBytes(&l.keyPtr), l.val, true
+		return db.getBytes(last.keyPtr), last.val, true
 	}
 	return nil, nil, false
 }
@@ -138,7 +136,8 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		panic(err)
 	}
 
-	nc.leafPtr = n.leafPtr
+	nc.keyPtr = n.keyPtr
+	nc.val = n.val
 
 	if n.prefixPtr != nil {
 		ncp, err := t.db.cloneBytes(n.prefixPtr)
@@ -168,23 +167,16 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 		var oldVal interface{}
 		didUpdate := false
 		if n.isLeaf() {
-			leaf := t.db.getLeafNode(n.leafPtr)
-			oldVal = leaf.val
+			oldVal = n.val
 			didUpdate = true
 		}
 
 		ncPtr := t.writeNode(nodePtr, true)
 		nc := t.db.getNode(ncPtr)
 
-		leafPtr, leaf, err := t.db.newLeafNode()
-		if err != nil {
-			panic(err)
-		}
+		nc.keyPtr = t.db.newBytesFromSlice(k)
+		nc.val = v
 
-		leaf.keyPtr = *t.db.newBytesFromSlice(k)
-		leaf.val = v
-
-		nc.leafPtr = leafPtr
 		return ncPtr, oldVal, didUpdate
 	}
 
@@ -198,16 +190,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 			panic(err)
 		}
 
-		leafPtr, leaf, err := t.db.newLeafNode()
-		if err != nil {
-			panic(err)
-		}
-
-		leaf.keyPtr = *t.db.newBytesFromSlice(k)
-		leaf.val = v
-
-		nn.leafPtr = leafPtr
-
+		nn.keyPtr = t.db.newBytesFromSlice(k)
+		nn.val = v
 		nn.prefixPtr = t.db.newBytesFromSlice(search)
 
 		nc := t.writeNode(nodePtr, false)
@@ -255,17 +239,11 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 
 	modChild.prefixPtr = t.db.newBytesFromSlice(pref[commonPrefix:])
 
-	leafPtr, leaf, err := t.db.newLeafNode()
-	if err != nil {
-		panic(err)
-	}
-	leaf.keyPtr = *t.db.newBytesFromSlice(k)
-	leaf.val = v
-
 	// If the new key is a subset, add to to this node
 	search = search[commonPrefix:]
 	if len(search) == 0 {
-		splitNode.leafPtr = leafPtr
+		splitNode.keyPtr = t.db.newBytesFromSlice(k)
+		splitNode.val = v
 		return ncPtr, nil, false
 	}
 
@@ -273,7 +251,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, v interface{}) (*Ptr, inter
 	if err != nil {
 		panic(err)
 	}
-	en.leafPtr = leafPtr
+	en.keyPtr = t.db.newBytesFromSlice(k)
+	en.val = v
 	en.prefixPtr = t.db.newBytesFromSlice(search)
 
 	splitNode.edges[search[0]] = enPtr

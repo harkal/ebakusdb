@@ -115,20 +115,6 @@ func (db *DB) Get(k []byte) (interface{}, bool) {
 	return db.getNode(db.root).Get(db, k)
 }
 
-func (db *DB) newLeafNode() (*Ptr, *leafNode, error) {
-	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(leafNode{})))
-	if err != nil {
-		return nil, nil, err
-	}
-	p := &Ptr{Offset: offset}
-	n := db.getLeafNode(p)
-	return p, n, nil
-}
-
-func (db *DB) getLeafNode(p *Ptr) *leafNode {
-	return (*leafNode)(db.allocator.GetPtr(p.Offset))
-}
-
 func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
 	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(ByteArray{}) + uintptr(size)))
 	if err != nil {
