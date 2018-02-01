@@ -66,6 +66,10 @@ func Test_Tnx(test *testing.T) {
 		test.Fatal("Update failed")
 	}
 
+	if v, _ := t.Get([]byte("key")); v != "va" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
 	err = db.Commit(t)
 	if err != nil {
 		test.Fatal("Commit failed")
