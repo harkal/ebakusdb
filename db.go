@@ -79,6 +79,7 @@ func (db *DB) Txn() *Txn {
 		db:   db,
 		root: db.root,
 	}
+	db.getNode(txn.root).Retain()
 	return txn
 }
 
