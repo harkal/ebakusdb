@@ -38,24 +38,17 @@ func NewBufferAllocator(buf []byte) (*BufferAllocator, error) {
 		return nil, ErrInvalidSize
 	}
 	buffer := &BufferAllocator{
-		bufferRef:  buf,
-		buffer:     (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
-		bufferSize: uint64(len(buf)),
-		TotalFree:  uint64(len(buf)),
+		bufferRef:     buf,
+		buffer:        (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
+		bufferSize:    uint64(len(buf)),
+		TotalFree:     uint64(len(buf)),
+		firstFreeByte: alignSize(1),
 	}
 	return buffer, nil
 }
 
 func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 	return unsafe.Pointer(&b.buffer[pos])
-}
-
-func alignSize(size uint64) uint64 {
-	if size&alignmentBytesMinusOne != 0 {
-		size += alignmentBytes
-		size &= ^uint64(alignmentBytesMinusOne)
-	}
-	return size
 }
 
 // Allocate a new buffer of specific size
@@ -68,6 +61,8 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		return 0, ErrOutOfMemory
 	}
 
+	fmt.Printf("+ allocate %d bytes\n", size)
+
 	// Ensure alignement
 	size = alignSize(size)
 
@@ -76,14 +71,20 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 
 	b.TotalFree -= size
 
-	fmt.Printf("+ allocate %d bytes\n", size)
-
 	return p, nil
 }
 
 func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
+	fmt.Printf("- Deallocate %d bytes\n", size)
 	size = alignSize(size)
 	b.TotalFree += size
-	fmt.Printf("- Deallocate %d bytes\n", size)
 	return nil
+}
+
+func alignSize(size uint64) uint64 {
+	if size&alignmentBytesMinusOne != 0 {
+		size += alignmentBytes
+		size &= ^uint64(alignmentBytesMinusOne)
+	}
+	return size
 }

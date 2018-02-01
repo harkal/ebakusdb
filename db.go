@@ -2,7 +2,6 @@ package ebakusdb
 
 import (
 	"os"
-	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
@@ -49,7 +48,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 }
 
 func (db *DB) init() error {
-	root, _, err := db.newNode()
+	root, _, err := newNode(db.allocator)
 	if err != nil {
 		return err
 	}
@@ -79,32 +78,10 @@ func (db *DB) Txn() *Txn {
 		db:   db,
 		root: db.root,
 	}
-	db.getNode(txn.root).Retain()
+	txn.root.getNode(db.allocator).Retain()
 	return txn
 }
 
-func (db *DB) Commit(txn *Txn) error {
-	newRootPtr := txn.Commit()
-	db.getNode(db.root).Release(db.allocator)
-	db.root = newRootPtr
-	return nil
-}
-
-func (db *DB) newNode() (*Ptr, *Node, error) {
-	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(Node{})))
-	if err != nil {
-		return nil, nil, err
-	}
-	p := &Ptr{Offset: offset}
-	n := db.getNode(p)
-	n.Retain()
-	return p, n, nil
-}
-
-func (db *DB) getNode(p *Ptr) *Node {
-	return (*Node)(db.allocator.GetPtr(p.Offset))
-}
-
 func (db *DB) Get(k []byte) (*[]byte, bool) {
-	return db.getNode(db.root).Get(db, k)
+	return db.root.getNode(db.allocator).Get(db, k)
 }

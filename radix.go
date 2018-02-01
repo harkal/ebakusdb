@@ -2,9 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
-	"fmt"
 
-	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -41,7 +39,7 @@ func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
 			break
 		}
 
-		n = db.getNode(nPtr)
+		n = nPtr.getNode(mm)
 
 		// Consume the search prefix
 		nprefix := n.prefixPtr.getBytes(mm)
@@ -71,7 +69,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		if nPtr.isNull() {
 			break
 		}
-		n = db.getNode(&nPtr)
+		n = nPtr.getNode(mm)
 
 		prefix := n.prefixPtr.getBytes(mm)
 		if bytes.HasPrefix(search, prefix) {
@@ -86,24 +84,6 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 	return nil, nil, false
 }
 
-func (n *Node) Release(mm balloc.MemoryManager) bool {
-	if n.refCount == 0 {
-		fmt.Printf("ERROR: node with refs: %d\n", n.refCount)
-	}
-	n.refCount--
-
-	fmt.Printf("Deref node with refs: %d\n", n.refCount)
-
-	if n.refCount <= 0 {
-		n.prefixPtr.BytesRelease(mm)
-		n.keyPtr.BytesRelease(mm)
-		n.valPtr.BytesRelease(mm)
-		return true
-	}
-
-	return false
-}
-
 const defaultWritableCache = 8192
 
 type Txn struct {
@@ -113,6 +93,7 @@ type Txn struct {
 }
 
 func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
+	mm := t.db.allocator
 	if t.writable == nil {
 		lru, err := simplelru.NewLRU(defaultWritableCache, nil)
 		if err != nil {
@@ -121,26 +102,24 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		t.writable = lru
 	}
 
-	n := t.db.getNode(nodePtr)
+	n := nodePtr.getNode(mm)
 
 	if _, ok := t.writable.Get(*nodePtr); ok {
 		n.Retain()
 		return nodePtr
 	}
 
-	ncPtr, nc, err := t.db.newNode()
+	ncPtr, nc, err := newNode(mm)
 	if err != nil {
 		panic(err)
 	}
 
-	mm := t.db.allocator
-
 	nc.keyPtr = n.keyPtr
-	nc.keyPtr.BytesRetain(mm)
+	nc.keyPtr.Retain(mm)
 	nc.valPtr = n.valPtr
-	nc.valPtr.BytesRetain(mm)
+	nc.valPtr.Retain(mm)
 	nc.prefixPtr = n.prefixPtr
-	nc.prefixPtr.BytesRetain(mm)
+	nc.prefixPtr.Retain(mm)
 
 	nc.edges = n.edges
 
@@ -148,7 +127,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		if edgeNode.isNull() {
 			continue
 		}
-		t.db.getNode(&edgeNode).Retain()
+		edgeNode.getNode(mm).Retain()
 	}
 
 	t.writable.Add(ncPtr, nil)
@@ -157,7 +136,7 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 
 func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
 	mm := t.db.allocator
-	n := t.db.getNode(nodePtr)
+	n := nodePtr.getNode(mm)
 	// Handle key exhaustion
 	if len(search) == 0 {
 		var oldVal *ByteArray
@@ -166,15 +145,15 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 			didUpdate = true
 
 			oldVal = &n.valPtr
-			oldVal.BytesRetain(mm)
+			oldVal.Retain(mm)
 		}
 
 		ncPtr := t.writeNode(nodePtr, true)
-		nc := t.db.getNode(ncPtr)
+		nc := ncPtr.getNode(mm)
 
 		nc.keyPtr = *newBytesFromSlice(mm, k)
 		nc.valPtr = vPtr
-		nc.valPtr.BytesRetain(mm)
+		nc.valPtr.Retain(mm)
 
 		return ncPtr, oldVal, didUpdate
 	}
@@ -184,22 +163,22 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	// No edge, create one
 	if childPtr.isNull() {
-		nnPtr, nn, err := t.db.newNode()
+		nnPtr, nn, err := newNode(mm)
 		if err != nil {
 			panic(err)
 		}
 
 		nn.keyPtr = *newBytesFromSlice(mm, k)
 		nn.valPtr = vPtr
-		nn.valPtr.BytesRetain(mm)
+		nn.valPtr.Retain(mm)
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := t.writeNode(nodePtr, false)
-		t.db.getNode(nc).edges[edgeLabel] = *nnPtr
+		nc.getNode(mm).edges[edgeLabel] = *nnPtr
 		return nc, nil, false
 	}
 
-	child := t.db.getNode(&childPtr)
+	child := childPtr.getNode(mm)
 
 	// Determine longest prefix of the search key on match
 	childPrefix := child.prefixPtr.getBytes(mm)
@@ -209,7 +188,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		newChildPtr, oldVal, didUpdate := t.insert(&childPtr, k, search, vPtr)
 		if newChildPtr != nil {
 			ncPtr := t.writeNode(nodePtr, false)
-			nc := t.db.getNode(ncPtr)
+			nc := ncPtr.getNode(mm)
 			nc.edges[edgeLabel] = *newChildPtr
 			return ncPtr, oldVal, didUpdate
 		}
@@ -218,21 +197,21 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	// Split the node
 	ncPtr := t.writeNode(nodePtr, false)
-	nc := t.db.getNode(ncPtr)
+	nc := ncPtr.getNode(mm)
 
-	splitNodePtr, splitNode, err := t.db.newNode()
+	splitNodePtr, splitNode, err := newNode(mm)
 	if err != nil {
 		panic(err)
 	}
 
 	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
-	t.db.getNode(&nc.edges[search[0]]).Release(mm)
+	nc.edges[search[0]].NodeRelease(mm)
 	nc.edges[search[0]] = *splitNodePtr
 
 	// Restore the existing child node
 	modChildPtr := t.writeNode(&childPtr, false)
-	modChild := t.db.getNode(modChildPtr)
+	modChild := modChildPtr.getNode(mm)
 	pref := modChild.prefixPtr.getBytes(mm)
 
 	splitNode.edges[pref[commonPrefix]] = *modChildPtr
@@ -244,17 +223,17 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	if len(search) == 0 {
 		splitNode.keyPtr = *newBytesFromSlice(mm, k)
 		splitNode.valPtr = vPtr
-		vPtr.BytesRetain(mm)
+		vPtr.Retain(mm)
 		return ncPtr, nil, false
 	}
 
-	enPtr, en, err := t.db.newNode()
+	enPtr, en, err := newNode(mm)
 	if err != nil {
 		panic(err)
 	}
 	en.keyPtr = *newBytesFromSlice(mm, k)
 	en.valPtr = vPtr
-	vPtr.BytesRetain(mm)
+	vPtr.Retain(mm)
 	en.prefixPtr = *newBytesFromSlice(mm, search)
 
 	splitNode.edges[search[0]] = *enPtr
@@ -266,9 +245,9 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	mm := t.db.allocator
 	vPtr := *newBytesFromSlice(mm, v)
 	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, vPtr)
-	vPtr.BytesRelease(mm)
+	vPtr.Release(mm)
 	if newRoot != nil {
-		t.db.getNode(t.root).Release(mm)
+		t.root.NodeRelease(mm)
 		t.root = newRoot
 	}
 
@@ -292,5 +271,12 @@ func (t *Txn) Root() *Ptr {
 
 // Get returns the key
 func (t *Txn) Get(k []byte) (*[]byte, bool) {
-	return t.db.getNode(t.root).Get(t.db, k)
+	return t.root.getNode(t.db.allocator).Get(t.db, k)
+}
+
+func (db *DB) Commit(txn *Txn) error {
+	newRootPtr := txn.Commit()
+	db.root.NodeRelease(db.allocator)
+	db.root = newRootPtr
+	return nil
 }

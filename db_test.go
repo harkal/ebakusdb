@@ -111,16 +111,18 @@ func Test_Get(test *testing.T) {
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
-
+	mm := db.allocator
 	free := db.allocator.TotalFree
 
-	if db.getNode(db.root).refCount != 1 {
+	fmt.Printf("Start: %d\n", free)
+
+	if db.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
 	t := db.Txn()
 
-	if db.getNode(db.root).refCount != 2 {
+	if db.root.getNode(mm).refCount != 2 {
 		test.Fatal("incorrect refcount")
 	}
 
@@ -129,11 +131,11 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
-	if db.getNode(db.root).refCount != 1 {
+	if db.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
-	if db.getNode(t.root).refCount != 1 {
+	if db.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
@@ -146,9 +148,9 @@ func Test_Get(test *testing.T) {
 			test.Fatal("Get failed")
 		}
 	*/
-	db.getNode(db.root).Release(db.allocator)
+	db.root.NodeRelease(mm)
 
-	fmt.Printf("%d %d (%d)\n", free, db.allocator.TotalFree, free-db.allocator.TotalFree)
+	fmt.Printf("%d %d (%d)\n", free, db.allocator.TotalFree, int(free)-int(db.allocator.TotalFree))
 
 }
 
@@ -319,7 +321,7 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 		t.Fatal("Failed to create byte array")
 	}
 
-	bPtr.BytesRetain(mm)
+	bPtr.Retain(mm)
 
 	if *bPtr.getBytesRefCount(mm) != 2 {
 		t.Fatal("Bad ref count")
@@ -340,14 +342,14 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 	}
 
 	free := db.allocator.TotalFree
-	b2Ptr.BytesRelease(mm)
+	b2Ptr.Release(mm)
 	if db.allocator.TotalFree-free != 16 {
 		t.Fatal("Failed to release")
 	}
 
 	free = db.allocator.TotalFree
-	bPtr.BytesRelease(mm)
-	bPtr.BytesRelease(mm)
+	bPtr.Release(mm)
+	bPtr.Release(mm)
 	if db.allocator.TotalFree-free != 16 {
 		t.Fatal("Failed to release")
 	}

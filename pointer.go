@@ -2,6 +2,7 @@ package ebakusdb
 
 type Ptr struct {
 	Offset uint64
+	Size   uint64
 }
 
 func (p *Ptr) isNull() bool {

@@ -12,7 +12,7 @@ func newBytes(mm balloc.MemoryManager, size uint64) (*ByteArray, []byte, error) 
 		return nil, nil, err
 	}
 	aPtr := &ByteArray{Offset: offset, Size: size}
-	aPtr.BytesRetain(mm)
+	aPtr.Retain(mm)
 	a := aPtr.getBytes(mm)
 	return aPtr, a, nil
 }
@@ -47,20 +47,20 @@ func (b *ByteArray) getBytesRefCount(mm balloc.MemoryManager) *int {
 	return (*int)(mm.GetPtr(b.Offset))
 }
 
-func (b *ByteArray) BytesRetain(mm balloc.MemoryManager) {
+func (b *ByteArray) Retain(mm balloc.MemoryManager) {
 	if b.Offset == 0 {
 		return
 	}
 	*b.getBytesRefCount(mm)++
 }
 
-func (b *ByteArray) BytesRelease(mm balloc.MemoryManager) {
+func (b *ByteArray) Release(mm balloc.MemoryManager) {
 	if b.Offset == 0 {
 		return
 	}
 	count := b.getBytesRefCount(mm)
 	*count--
 	if *count == 0 {
-		mm.Deallocate(b.Offset, b.Size)
+		mm.Deallocate(b.Offset, uint64(unsafe.Sizeof(int(0))+uintptr(b.Size)))
 	}
 }
