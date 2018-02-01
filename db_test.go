@@ -343,14 +343,14 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 
 	free := db.allocator.TotalFree
 	b2Ptr.Release(mm)
-	if db.allocator.TotalFree-free != 16 {
+	if db.allocator.TotalFree <= free {
 		t.Fatal("Failed to release")
 	}
 
 	free = db.allocator.TotalFree
 	bPtr.Release(mm)
 	bPtr.Release(mm)
-	if db.allocator.TotalFree-free != 16 {
+	if db.allocator.TotalFree <= free {
 		t.Fatal("Failed to release")
 	}
 }
