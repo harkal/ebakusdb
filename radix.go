@@ -155,6 +155,32 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 	return nil, nil, false
 }
 
+func (n *Node) Release() bool {
+	return false
+}
+
+/*
+func (n *Node) Release(db *DB) bool {
+	n.refCount--
+
+	if n.refCount <= 0 {
+		if n.prefixPtr != nil {
+			if err := db.allocator.Deallocate(n.prefixPtr.Offset); err != nil {
+				panic(err)
+			}
+		}
+		if n.leafPtr != nil {
+			if err := db.allocator.Deallocate(n.leafPtr.Offset); err != nil {
+				panic(err)
+			}
+		}
+		return false
+	}
+
+	return false
+}
+*/
+
 const defaultWritableCache = 8192
 
 type Txn struct {

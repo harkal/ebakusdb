@@ -41,7 +41,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		readOnly: options.ReadOnly,
 	}
 
-	buffer := make([]byte, 1024*1024)
+	buffer := make([]byte, 512*1024*1024)
 
 	allocator, err := balloc.NewBufferAllocator(buffer)
 	if err != nil {

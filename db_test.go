@@ -2,8 +2,37 @@ package ebakusdb
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 )
+
+var src = rand.NewSource(time.Now().UnixNano())
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const (
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+func RandStringBytesMaskImprSrc(n int) string {
+	b := make([]byte, n)
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = src.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
+			b[i] = letterBytes[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+
+	return string(b)
+}
 
 func Test_Open(t *testing.T) {
 
@@ -91,6 +120,42 @@ func Test_Get(test *testing.T) {
 
 	if v, _ := db.Get([]byte("key")); v != "value" {
 		test.Fatal("Get failed")
+	}
+
+}
+
+func Test_InsertGet(t *testing.T) {
+	db, err := Open("test.db", 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db")
+	}
+
+	ins := func(key, val string) {
+		txn := db.Txn()
+		_, update := txn.Insert([]byte(key), val)
+		if update == true {
+			t.Fatal("Insert failed")
+		}
+		db.Commit(txn)
+	}
+
+	data := make(map[string]string)
+
+	for i := 0; i < 50000; i++ {
+		k := RandStringBytesMaskImprSrc(64)
+		v := RandStringBytesMaskImprSrc(120)
+		data[k] = v
+	}
+
+	for k, v := range data {
+		ins(k, v)
+	}
+
+	for k, v := range data {
+		dv, found := db.Get([]byte(k))
+		if found == false || dv != v {
+			t.Fatal("Failed")
+		}
 	}
 
 }
