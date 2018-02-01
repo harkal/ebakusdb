@@ -84,3 +84,49 @@ func Test_Alignment(t *testing.T) {
 	}
 
 }
+
+func Test_DeallocateAligned(t *testing.T) {
+	totalSpace := uint64(1024 * 1024) // 1MB
+	buffer := make([]byte, totalSpace)
+
+	ba, err := balloc.NewBufferAllocator(buffer)
+	if err != nil || ba == nil {
+		t.Fatal("failed to create buffer")
+	}
+
+	free := ba.TotalFree
+	p1, err := ba.Allocate(16)
+	if err != nil {
+		t.Fatal("failed to allocate 10 bytes")
+	}
+	if free-ba.TotalFree != 16 {
+		t.Fatal("Incorrect free space")
+	}
+	ba.Deallocate(p1, 16)
+	if ba.TotalFree != free {
+		t.Fatal("Incorrect free space")
+	}
+}
+
+func Test_DeallocateMissaligned(t *testing.T) {
+	totalSpace := uint64(1024 * 1024) // 1MB
+	buffer := make([]byte, totalSpace)
+
+	ba, err := balloc.NewBufferAllocator(buffer)
+	if err != nil || ba == nil {
+		t.Fatal("failed to create buffer")
+	}
+
+	free := ba.TotalFree
+	p1, err := ba.Allocate(15)
+	if err != nil {
+		t.Fatal("failed to allocate 10 bytes")
+	}
+	if free-ba.TotalFree != 16 {
+		t.Fatal("Incorrect free space")
+	}
+	ba.Deallocate(p1, 15)
+	if ba.TotalFree != free {
+		t.Fatal("Incorrect free space")
+	}
+}

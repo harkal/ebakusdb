@@ -2,26 +2,19 @@ package ebakusdb
 
 import (
 	"os"
-	"time"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
 
-// Options represents the options for the database.
 type Options struct {
-	// Timeout is the amount of time to wait to obtain a file lock.
-	// When set to zero it will wait indefinitely. This option is only
-	// available on Darwin and Linux.
-	Timeout time.Duration
-
 	// Open database in read-only mode.
 	ReadOnly bool
 }
 
 // DefaultOptions for the DB
 var DefaultOptions = &Options{
-	Timeout: 0,
+	ReadOnly: false,
 }
 
 type DB struct {
@@ -116,11 +109,12 @@ func (db *DB) Get(k []byte) (*[]byte, bool) {
 }
 
 func (db *DB) newBytes(size uint64) (*ByteArray, []byte, error) {
-	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(ByteArray{}) + uintptr(size)))
+	offset, err := db.allocator.Allocate(uint64(unsafe.Sizeof(int(0)) + uintptr(size)))
 	if err != nil {
 		return nil, nil, err
 	}
 	aPtr := &ByteArray{Offset: offset, Size: size}
+	db.BytesRetain(aPtr)
 	a := db.getBytes(aPtr)
 	return aPtr, a, nil
 }
@@ -144,9 +138,27 @@ func (db *DB) cloneBytes(bPtr *ByteArray) (*ByteArray, error) {
 
 	copy(newB, old)
 
+	*db.getBytesRefCount(bPtr) = 1
+
 	return newBPtr, nil
 }
 
 func (db *DB) getBytes(b *ByteArray) []byte {
-	return (*[0x7fffff]byte)(db.allocator.GetPtr(b.Offset + uint64(unsafe.Sizeof(ByteArray{}))))[:b.Size]
+	return (*[0x7fffff]byte)(db.allocator.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
+}
+
+func (db *DB) getBytesRefCount(b *ByteArray) *int {
+	return (*int)(db.allocator.GetPtr(b.Offset))
+}
+
+func (db *DB) BytesRetain(b *ByteArray) {
+	*db.getBytesRefCount(b)++
+}
+
+func (db *DB) BytesRelease(b *ByteArray) {
+	count := db.getBytesRefCount(b)
+	*count--
+	if *count == 0 {
+		db.allocator.Deallocate(b.Offset, b.Size)
+	}
 }

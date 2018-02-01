@@ -27,6 +27,8 @@ type BufferAllocator struct {
 	buffer        *[maxBufferSize]byte
 	bufferSize    uint64
 	firstFreeByte uint64
+
+	TotalFree uint64
 }
 
 // NewBufferAllocator created a new buffer allocator
@@ -38,12 +40,21 @@ func NewBufferAllocator(buf []byte) (*BufferAllocator, error) {
 		bufferRef:  buf,
 		buffer:     (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
 		bufferSize: uint64(len(buf)),
+		TotalFree:  uint64(len(buf)),
 	}
 	return buffer, nil
 }
 
 func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 	return unsafe.Pointer(&b.buffer[pos])
+}
+
+func alignSize(size uint64) uint64 {
+	if size&alignmentBytesMinusOne != 0 {
+		size += alignmentBytes
+		size &= ^uint64(alignmentBytesMinusOne)
+	}
+	return size
 }
 
 // Allocate a new buffer of specific size
@@ -56,19 +67,18 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		return 0, ErrOutOfMemory
 	}
 
+	// Ensure alignement
+	size = alignSize(size)
+
 	p := b.firstFreeByte
 	b.firstFreeByte += size
 
-	// Ensure alignement
-	if b.firstFreeByte&alignmentBytesMinusOne != 0 {
-		b.firstFreeByte += alignmentBytes
-		b.firstFreeByte &= ^uint64(alignmentBytesMinusOne)
-	}
+	b.TotalFree -= size
 
 	return p, nil
 }
 
-func (b *BufferAllocator) Deallocate(pos uint64) error {
-
+func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
+	b.TotalFree += alignSize(size)
 	return nil
 }

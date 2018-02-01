@@ -170,6 +170,8 @@ func Test_ByteArrayCreation(t *testing.T) {
 		t.Fatal("Failed to open db")
 	}
 
+	fmt.Printf("Free memory: %d\n", db.allocator.TotalFree)
+
 	bPtr, b, err := db.newBytes(16)
 	if err != nil || bPtr == nil {
 		t.Fatal("Failed to create byte array")
@@ -181,6 +183,17 @@ func Test_ByteArrayCreation(t *testing.T) {
 
 	if len(b) != 16 {
 		t.Fatal("Incorrect array size")
+	}
+
+	rCount := db.getBytesRefCount(bPtr)
+	if *rCount != 1 {
+		t.Fatal("bad ref count")
+	}
+
+	*rCount++
+
+	if *db.getBytesRefCount(bPtr) != 2 {
+		t.Fatal("bad ref count")
 	}
 
 	b[0] = 1
@@ -196,6 +209,8 @@ func Test_ByteArrayCreation(t *testing.T) {
 	if b2[0] != 1 || b2[1] != 2 || b2[5] != 3 || b2[15] != 0xff {
 		t.Fatal("Data corruption")
 	}
+
+	fmt.Printf("Free memory: %d\n", db.allocator.TotalFree)
 }
 
 func Test_ByteArrayCloneing(t *testing.T) {
@@ -232,5 +247,50 @@ func Test_ByteArrayCloneing(t *testing.T) {
 
 	if b2[1] != 0xf || b[1] != 2 {
 		t.Fatal("Data corruption")
+	}
+}
+
+func Test_ByteArrayRefCounting(t *testing.T) {
+	db, err := Open("test.db", 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db")
+	}
+
+	bPtr, b, err := db.newBytes(16)
+	if err != nil || bPtr == nil {
+		t.Fatal("Failed to create byte array")
+	}
+
+	db.BytesRetain(bPtr)
+
+	if *db.getBytesRefCount(bPtr) != 2 {
+		t.Fatal("Bad ref count")
+	}
+
+	b[0] = 1
+	b[1] = 2
+	b[5] = 3
+	b[15] = 0xff
+
+	b2Ptr, err := db.cloneBytes(bPtr)
+	if err != nil || b2Ptr == nil {
+		t.Fatal("Failed to create byte array")
+	}
+
+	if *db.getBytesRefCount(b2Ptr) != 1 {
+		t.Fatal("Bad ref count")
+	}
+
+	free := db.allocator.TotalFree
+	db.BytesRelease(b2Ptr)
+	if db.allocator.TotalFree-free != 16 {
+		t.Fatal("Failed to release")
+	}
+
+	free = db.allocator.TotalFree
+	db.BytesRelease(bPtr)
+	db.BytesRelease(bPtr)
+	if db.allocator.TotalFree-free != 16 {
+		t.Fatal("Failed to release")
 	}
 }
