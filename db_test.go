@@ -401,4 +401,11 @@ func Test_Iterator(test *testing.T) {
 		test.Fatal("Get failed")
 	}
 
+	iter = db.Iter()
+	k, v, end = iter.Next()
+	k, v, end = iter.Next()
+	k, v, end = iter.Next()
+	if string(k) != "Harry" || string(v) != "value the big universe dude" {
+		test.Fatal("Get failed")
+	}
 }
