@@ -4,6 +4,10 @@ type Ptr struct {
 	Offset uint64
 }
 
+func (p *Ptr) isNull() bool {
+	return p.Offset == 0
+}
+
 type RefCounted interface {
 	Retain()
 	Release() bool
@@ -30,4 +34,8 @@ func (p *RefCountedObject) GetRefCount() int {
 type ByteArray struct {
 	Offset uint64
 	Size   uint64
+}
+
+func (p *ByteArray) isNull() bool {
+	return p.Offset == 0
 }
