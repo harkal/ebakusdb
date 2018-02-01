@@ -112,6 +112,8 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Failed to open db")
 	}
 
+	free := db.allocator.TotalFree
+
 	if db.getNode(db.root).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
@@ -122,7 +124,7 @@ func Test_Get(test *testing.T) {
 		test.Fatal("incorrect refcount")
 	}
 
-	_, update := t.Insert([]byte("key"), []byte("value"))
+	_, update := t.Insert([]byte("key"), []byte("value the big shit of the universe dude"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
@@ -140,9 +142,13 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Commit failed")
 	}
 
-	if v, _ := db.Get([]byte("key")); string(*v) != "value" {
-		test.Fatal("Get failed")
-	}
+	/*	if v, _ := db.Get([]byte("key")); string(*v) != "value" {
+			test.Fatal("Get failed")
+		}
+	*/
+	db.getNode(db.root).Release(db.allocator)
+
+	fmt.Printf("%d %d (%d)\n", free, db.allocator.TotalFree, free-db.allocator.TotalFree)
 
 }
 
