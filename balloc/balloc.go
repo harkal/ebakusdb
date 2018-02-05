@@ -2,7 +2,6 @@ package balloc
 
 import (
 	"errors"
-	"fmt"
 	"unsafe"
 )
 
@@ -24,12 +23,9 @@ type MemoryManager interface {
 
 // BufferAllocator allocates memory in a preallocated buffer
 type BufferAllocator struct {
-	bufferRef  []byte
 	bufferPtr  unsafe.Pointer
 	bufferSize uint64
 	header     *header
-
-	Grow func(size uint64) error
 }
 
 const magic uint32 = 0xca01af01
@@ -37,59 +33,45 @@ const magic uint32 = 0xca01af01
 type header struct {
 	magic         uint32
 	firstFreeByte uint64
-	TotalFree     uint64
+	TotalUsed     uint64
 }
 
 // NewBufferAllocator created a new buffer allocator
-func NewBufferAllocator(buf []byte, firstFree uint64) (*BufferAllocator, error) {
-	if len(buf)&alignmentBytesMinusOne != 0 {
+func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) (*BufferAllocator, error) {
+	if bufSize&alignmentBytesMinusOne != 0 {
 		return nil, ErrInvalidSize
 	}
 
 	buffer := &BufferAllocator{
-		bufferRef:  buf,
-		bufferPtr:  unsafe.Pointer(&buf[0]),
-		bufferSize: uint64(len(buf)),
+		bufferPtr:  bufPtr,
+		bufferSize: bufSize,
 	}
 
 	firstFree = alignSize(firstFree)
-	buffer.header = (*header)(unsafe.Pointer(&buf[firstFree]))
+	buffer.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
 
 	if buffer.header.magic != magic {
 		firstFree += uint64(unsafe.Sizeof(*buffer.header))
 
 		buffer.header.firstFreeByte = uint64(alignSize(firstFree))
-		buffer.header.TotalFree = uint64(len(buf))
+		buffer.header.TotalUsed = 0
 	}
 
 	return buffer, nil
 }
 
-const megaByte = 1024 * 1024
-const gigaByte = 1024 * megaByte
-
-func (b *BufferAllocator) growBuffer(size uint64) error {
-	var newSize = b.bufferSize
-
-	for newSize < size {
-		if b.bufferSize < gigaByte {
-			newSize *= 2
-		} else if b.bufferSize >= gigaByte {
-			newSize += gigaByte
-		}
-	}
-
-	if err := b.Grow(newSize); err != nil {
-		return err
-	}
-
-	b.bufferSize = newSize
-
-	return nil
+func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
+	b.bufferPtr = bufPtr
+	b.bufferSize = bufSize
+	b.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
-	return b.header.TotalFree
+	return b.bufferSize - b.header.TotalUsed
+}
+
+func (b *BufferAllocator) GetCapacity() uint64 {
+	return b.bufferSize
 }
 
 func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
@@ -104,10 +86,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 	}
 
 	if b.header.firstFreeByte+size > b.bufferSize {
-		fmt.Printf("+ GROW %d bytes\n", b.header.firstFreeByte+size)
-		if err := b.growBuffer(b.header.firstFreeByte + size); err != nil {
-			return 0, ErrOutOfMemory
-		}
+		return 0, ErrOutOfMemory
 	}
 
 	// Ensure alignement
@@ -116,7 +95,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 	p := b.header.firstFreeByte
 	b.header.firstFreeByte += size
 
-	b.header.TotalFree -= size
+	b.header.TotalUsed += size
 
 	return p, nil
 }
@@ -124,7 +103,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
 	//fmt.Printf("- Deallocate %d bytes\n", size)
 	size = alignSize(size)
-	b.header.TotalFree += size
+	b.header.TotalUsed -= size
 	return nil
 }
 

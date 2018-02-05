@@ -94,18 +94,20 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, fmt.Errorf("Unsupported EbakusDB file version")
 	}
 
-	allocator, err := balloc.NewBufferAllocator(db.bufferRef, uint64(headerSize))
+	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize))
 	if err != nil {
 		return nil, err
 	}
-	allocator.Grow = func(size uint64) error {
-		return db.Grow(size)
-	}
+
 	db.allocator = allocator
 
 	db.init()
 
 	return db, nil
+}
+
+func (db *DB) GetPath() string {
+	return db.path
 }
 
 func (db *DB) init() error {
@@ -133,19 +135,50 @@ func (db *DB) initNewDBFile() error {
 		return ErrFailedToCreateDB
 	}
 
-	db.Grow(16 * 1024 * 1024)
+	if err := db.file.Truncate(megaByte); err != nil {
+		return fmt.Errorf("file resize error: %s", err)
+	}
 
 	return err
 }
 
-func (db *DB) Grow(size uint64) error {
-	if err := db.file.Truncate(int64(size)); err != nil {
+const megaByte = 1024 * 1024
+const gigaByte = 1024 * megaByte
+
+func (db *DB) Grow() error {
+	if float32(db.allocator.GetFree()) > float32(db.allocator.GetCapacity())*0.2 {
+		return nil
+	}
+
+	var newSize = db.allocator.GetCapacity()
+
+	if newSize < gigaByte {
+		newSize *= 2
+	} else if newSize >= gigaByte {
+		newSize += gigaByte
+	}
+
+	fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
+
+	if err := db.munmap(); err != nil {
+		return fmt.Errorf("Failed to unmap memory error: %s", err)
+	}
+
+	if err := db.file.Truncate(int64(newSize)); err != nil {
 		return fmt.Errorf("file resize error: %s", err)
 	}
 	if err := db.file.Sync(); err != nil {
 		return fmt.Errorf("file sync error: %s", err)
 	}
-	db.bufferSize = size
+
+	if err := db.mmap(int(newSize)); err != nil {
+		return fmt.Errorf("Failed to map memory error: %s", err)
+	}
+
+	headerSize := unsafe.Sizeof(header{})
+	db.header = (*header)(unsafe.Pointer(&db.bufferRef[0]))
+	db.allocator.SetBuffer(unsafe.Pointer(&db.buffer[0]), newSize, uint64(headerSize))
+
 	return nil
 }
 

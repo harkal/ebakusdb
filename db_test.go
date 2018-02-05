@@ -2,7 +2,9 @@ package ebakusdb
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 )
@@ -35,16 +37,16 @@ func RandStringBytesMaskImprSrc(n int) string {
 }
 
 func Test_Open(t *testing.T) {
-
-	db, err := Open("/Users/harkal/test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db", err)
 	}
 }
 
 func Test_Tnx(test *testing.T) {
-
-	db, err := Open("/Users/harkal/test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
@@ -106,8 +108,8 @@ func Test_Tnx(test *testing.T) {
 }
 
 func Test_Get(test *testing.T) {
-
-	db, err := Open("/Users/harkal/test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
@@ -156,7 +158,8 @@ func Test_Get(test *testing.T) {
 
 func Test_Get_KeySubset(test *testing.T) {
 
-	db, err := Open("test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
@@ -186,7 +189,8 @@ func Test_Get_KeySubset(test *testing.T) {
 }
 
 func Test_InsertGet(t *testing.T) {
-	db, err := Open("/Users/harkal/test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
 	}
@@ -222,7 +226,8 @@ func Test_InsertGet(t *testing.T) {
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
-	db, err := Open("test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
 	}
@@ -272,7 +277,8 @@ func Test_ByteArrayCreation(t *testing.T) {
 }
 
 func Test_ByteArrayCloneing(t *testing.T) {
-	db, err := Open("test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
 	}
@@ -310,7 +316,8 @@ func Test_ByteArrayCloneing(t *testing.T) {
 }
 
 func Test_ByteArrayRefCounting(t *testing.T) {
-	db, err := Open("test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
 	}
@@ -356,8 +363,8 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 }
 
 func Test_Iterator(test *testing.T) {
-
-	db, err := Open("test.db", 0, nil)
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
@@ -408,4 +415,18 @@ func Test_Iterator(test *testing.T) {
 	if string(k) != "Harry" || string(v) != "value the big universe dude" {
 		test.Fatal("Get failed")
 	}
+}
+
+func tempfile() string {
+	f, err := ioutil.TempFile("/tmp", "ebakusdb-")
+	if err != nil {
+		panic(err)
+	}
+	if err := f.Close(); err != nil {
+		panic(err)
+	}
+	if err := os.Remove(f.Name()); err != nil {
+		panic(err)
+	}
+	return f.Name()
 }

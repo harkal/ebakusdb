@@ -263,12 +263,18 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	}
 
 	oVal := oldVal.getBytes(mm)
+
 	return &oVal, didUpdate
 }
 
-func (t *Txn) Commit() *Ptr {
+func (t *Txn) Commit() error {
 	t.writable = nil
-	return &t.root
+	return t.db.Commit(t)
+}
+
+func (t *Txn) Rollback() {
+	t.writable = nil
+	t.root.NodeRelease(t.db.allocator)
 }
 
 func (t *Txn) Root() *Ptr {
@@ -282,7 +288,8 @@ func (t *Txn) Get(k []byte) (*[]byte, bool) {
 }
 
 func (db *DB) Commit(txn *Txn) error {
-	newRootPtr := txn.Commit()
+	newRootPtr := txn.Root()
+	db.Grow()
 	db.header.root.NodeRelease(db.allocator)
 	db.header.root = *newRootPtr
 	return nil
