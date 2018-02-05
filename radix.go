@@ -93,7 +93,7 @@ const defaultWritableCache = 8192
 
 type Txn struct {
 	db       *DB
-	root     *Ptr
+	root     Ptr
 	writable *simplelru.LRU
 }
 
@@ -250,11 +250,11 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	mm := t.db.allocator
 	k = encodeKey(k)
 	vPtr := *newBytesFromSlice(mm, v)
-	newRoot, oldVal, didUpdate := t.insert(t.root, k, k, vPtr)
+	newRoot, oldVal, didUpdate := t.insert(&t.root, k, k, vPtr)
 	vPtr.Release(mm)
 	if newRoot != nil {
 		t.root.NodeRelease(mm)
-		t.root = newRoot
+		t.root = *newRoot
 	}
 
 	if oldVal == nil {
@@ -268,11 +268,11 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 
 func (t *Txn) Commit() *Ptr {
 	t.writable = nil
-	return t.root
+	return &t.root
 }
 
 func (t *Txn) Root() *Ptr {
-	return t.root
+	return &t.root
 }
 
 // Get returns the key
@@ -283,7 +283,7 @@ func (t *Txn) Get(k []byte) (*[]byte, bool) {
 
 func (db *DB) Commit(txn *Txn) error {
 	newRootPtr := txn.Commit()
-	db.root.NodeRelease(db.allocator)
-	db.root = newRootPtr
+	db.header.root.NodeRelease(db.allocator)
+	db.header.root = *newRootPtr
 	return nil
 }

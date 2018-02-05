@@ -1,9 +1,16 @@
 package ebakusdb
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
+)
+
+var (
+	ErrFailedToCreateDB = errors.New("Failed to create database")
 )
 
 type Options struct {
@@ -19,9 +26,23 @@ var DefaultOptions = &Options{
 type DB struct {
 	readOnly bool
 
-	allocator *balloc.BufferAllocator
+	path string
+	file *os.File
 
-	root *Ptr
+	bufferRef  []byte
+	buffer     *[0x9000000000]byte
+	bufferSize uint64
+	header     *header
+	allocator  *balloc.BufferAllocator
+}
+
+const magic uint32 = 0xff01cf11
+const version uint32 = 1
+
+type header struct {
+	magic   uint32
+	version uint32
+	root    Ptr
 }
 
 func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
@@ -29,13 +50,51 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		options = DefaultOptions
 	}
 
+	if mode == 0 {
+		mode = 0666
+	}
+
 	db := &DB{
 		readOnly: options.ReadOnly,
 	}
 
-	buffer := make([]byte, 1024*1024*1024)
+	flag := os.O_RDWR
+	if db.readOnly {
+		flag = os.O_RDONLY
+	}
 
-	allocator, err := balloc.NewBufferAllocator(buffer)
+	db.path = path
+	var err error
+	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
+		fmt.Println(err)
+		db.close()
+		return nil, err
+	}
+
+	info, err := db.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() == 0 {
+		db.initNewDBFile()
+	}
+
+	info, err = db.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	db.mmap(int(info.Size()))
+
+	headerSize := unsafe.Sizeof(header{})
+	db.header = (*header)(unsafe.Pointer(&db.bufferRef[0]))
+	if db.header.magic != magic {
+		return nil, fmt.Errorf("Not an EbakusDB file")
+	}
+	if db.header.version != version {
+		return nil, fmt.Errorf("Unsupported EbakusDB file version")
+	}
+
+	allocator, err := balloc.NewBufferAllocator(db.bufferRef, uint64(headerSize))
 	if err != nil {
 		return nil, err
 	}
@@ -48,13 +107,46 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 }
 
 func (db *DB) init() error {
-	root, _, err := newNode(db.allocator)
-	if err != nil {
-		return err
+	if db.header.root.isNull() {
+		root, _, err := newNode(db.allocator)
+		if err != nil {
+			return err
+		}
+
+		db.header.root = *root
 	}
 
-	db.root = root
+	return nil
+}
 
+func (db *DB) initNewDBFile() error {
+	var h *header
+	buf := make([]byte, unsafe.Sizeof(*h))
+	h = (*header)(unsafe.Pointer(&buf[0]))
+	h.magic = magic
+	h.version = version
+
+	count, err := db.file.Write(buf)
+	if count != int(unsafe.Sizeof(*h)) {
+		return ErrFailedToCreateDB
+	}
+
+	db.grow(16 * 1024)
+
+	return err
+}
+
+func (db *DB) grow(size uint64) error {
+	if err := db.file.Truncate(int64(size)); err != nil {
+		return fmt.Errorf("file resize error: %s", err)
+	}
+	if err := db.file.Sync(); err != nil {
+		return fmt.Errorf("file sync error: %s", err)
+	}
+	return nil
+}
+
+func (db *DB) close() error {
 	return nil
 }
 
@@ -105,7 +197,7 @@ func decodeKey(key []byte) []byte {
 func (db *DB) Txn() *Txn {
 	txn := &Txn{
 		db:   db,
-		root: db.root,
+		root: db.header.root,
 	}
 	txn.root.getNode(db.allocator).Retain()
 	return txn
@@ -113,10 +205,10 @@ func (db *DB) Txn() *Txn {
 
 func (db *DB) Get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
-	return db.root.getNode(db.allocator).Get(db, k)
+	return db.header.root.getNode(db.allocator).Get(db, k)
 }
 
 func (db *DB) Iter() *Iterator {
-	iter := db.root.getNode(db.allocator).Iterator(db.allocator)
+	iter := db.header.root.getNode(db.allocator).Iterator(db.allocator)
 	return iter
 }

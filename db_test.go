@@ -36,15 +36,15 @@ func RandStringBytesMaskImprSrc(n int) string {
 
 func Test_Open(t *testing.T) {
 
-	db, err := Open("test.db", 0, nil)
+	db, err := Open("/Users/harkal/test.db", 0, nil)
 	if err != nil || db == nil {
-		t.Fatal("Failed to open db")
+		t.Fatal("Failed to open db", err)
 	}
 }
 
 func Test_Tnx(test *testing.T) {
 
-	db, err := Open("test.db", 0, nil)
+	db, err := Open("/Users/harkal/test.db", 0, nil)
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
@@ -116,13 +116,13 @@ func Test_Get(test *testing.T) {
 
 	fmt.Printf("Start: %d\n", free)
 
-	if db.root.getNode(mm).refCount != 1 {
+	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
 	t := db.Txn()
 
-	if db.root.getNode(mm).refCount != 2 {
+	if db.header.root.getNode(mm).refCount != 2 {
 		test.Fatal("incorrect refcount")
 	}
 
@@ -131,11 +131,11 @@ func Test_Get(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
-	if db.root.getNode(mm).refCount != 1 {
+	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
-	if db.root.getNode(mm).refCount != 1 {
+	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
 
@@ -148,7 +148,7 @@ func Test_Get(test *testing.T) {
 			test.Fatal("Get failed")
 		}
 	*/
-	db.root.NodeRelease(mm)
+	db.header.root.NodeRelease(mm)
 
 	fmt.Printf("%d %d (%d)\n", free, db.allocator.TotalFree, int(free)-int(db.allocator.TotalFree))
 
@@ -365,7 +365,7 @@ func Test_Iterator(test *testing.T) {
 
 	t := db.Txn()
 
-	if db.root.getNode(mm).refCount != 2 {
+	if db.header.root.getNode(mm).refCount != 2 {
 		test.Fatal("incorrect refcount")
 	}
 

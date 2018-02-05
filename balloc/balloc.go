@@ -32,7 +32,7 @@ type BufferAllocator struct {
 }
 
 // NewBufferAllocator created a new buffer allocator
-func NewBufferAllocator(buf []byte) (*BufferAllocator, error) {
+func NewBufferAllocator(buf []byte, firstFree uint64) (*BufferAllocator, error) {
 	if len(buf)&alignmentBytesMinusOne != 0 {
 		return nil, ErrInvalidSize
 	}
@@ -41,7 +41,7 @@ func NewBufferAllocator(buf []byte) (*BufferAllocator, error) {
 		buffer:        (*[maxBufferSize]byte)(unsafe.Pointer(&buf[0])),
 		bufferSize:    uint64(len(buf)),
 		TotalFree:     uint64(len(buf)),
-		firstFreeByte: alignSize(1),
+		firstFreeByte: alignSize(firstFree),
 	}
 	return buffer, nil
 }
