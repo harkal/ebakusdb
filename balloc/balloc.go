@@ -31,9 +31,15 @@ type BufferAllocator struct {
 const magic uint32 = 0xca01af01
 
 type header struct {
-	magic         uint32
-	firstFreeByte uint64
-	TotalUsed     uint64
+	magic          uint32
+	firstFreeChunk uint64
+	TotalUsed      uint64
+}
+
+type chunk struct {
+	nextFree uint64 // zero if occupied
+	prevFree uint64
+	size     uint64
 }
 
 // NewBufferAllocator created a new buffer allocator
@@ -53,17 +59,37 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 	if buffer.header.magic != magic {
 		firstFree += uint64(unsafe.Sizeof(*buffer.header))
 
-		buffer.header.firstFreeByte = uint64(alignSize(firstFree))
+		buffer.header.firstFreeChunk = uint64(alignSize(firstFree))
 		buffer.header.TotalUsed = 0
+
+		c := buffer.getChunk(buffer.header.firstFreeChunk)
+		c.size = bufSize - buffer.header.firstFreeChunk
+		c.nextFree = 0
 	}
 
 	return buffer, nil
 }
 
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
+	oldSize := b.bufferSize
+
 	b.bufferPtr = bufPtr
 	b.bufferSize = bufSize
 	b.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
+
+	// find last free chunk
+	chunkPos := b.header.firstFreeChunk
+	c := b.getChunk(chunkPos)
+	for c.nextFree != 0 {
+		chunkPos = c.nextFree
+		c = b.getChunk(chunkPos)
+	}
+
+	nc := b.getChunk(oldSize)
+	c.nextFree = oldSize
+	nc.prevFree = chunkPos
+	nc.nextFree = 0
+	nc.size = bufSize - oldSize
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
@@ -85,15 +111,52 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		return 0, ErrInvalidSize
 	}
 
-	if b.header.firstFreeByte+size > b.bufferSize {
-		return 0, ErrOutOfMemory
-	}
+	chunkSize := uint64(unsafe.Sizeof(chunk{}))
+	//size += chunkSize
 
 	// Ensure alignement
 	size = alignSize(size)
 
-	p := b.header.firstFreeByte
-	b.header.firstFreeByte += size
+	if b.header.firstFreeChunk+size > b.bufferSize {
+		return 0, ErrOutOfMemory
+	}
+
+	chunkPos := b.header.firstFreeChunk
+	var c *chunk
+	for chunkPos != 0 {
+		c = b.getChunk(chunkPos)
+		if c.size >= size+chunkSize {
+			break
+		}
+		chunkPos = c.nextFree
+	}
+
+	if chunkPos == 0 {
+		return 0, ErrOutOfMemory
+	}
+
+	c.size -= size
+
+	newFree := chunkPos + size
+	nc := b.getChunk(newFree)
+	if nc != nil {
+		*nc = *c
+	} else {
+		newFree = 0
+	}
+
+	prev := b.getChunk(c.prevFree)
+	if prev != nil {
+		prev.nextFree = newFree
+	} else {
+		b.header.firstFreeChunk = newFree
+	}
+	next := b.getChunk(c.nextFree)
+	if next != nil {
+		next.prevFree = newFree
+	}
+
+	p := chunkPos
 
 	b.header.TotalUsed += size
 
@@ -102,9 +165,17 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 
 func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
 	//fmt.Printf("- Deallocate %d bytes\n", size)
+	size += uint64(unsafe.Sizeof(chunk{}))
 	size = alignSize(size)
 	b.header.TotalUsed -= size
 	return nil
+}
+
+func (b *BufferAllocator) getChunk(offset uint64) *chunk {
+	if offset == 0 || offset > b.bufferSize-uint64(unsafe.Sizeof(chunk{})) {
+		return nil
+	}
+	return (*chunk)(unsafe.Pointer(uintptr(b.bufferPtr) + uintptr(offset)))
 }
 
 func alignSize(size uint64) uint64 {
