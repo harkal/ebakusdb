@@ -158,7 +158,7 @@ func (db *DB) Grow() error {
 		newSize += gigaByte
 	}
 
-	fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
+	//fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
 
 	if err := db.munmap(); err != nil {
 		return fmt.Errorf("Failed to unmap memory error: %s", err)
