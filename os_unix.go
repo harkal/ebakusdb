@@ -12,9 +12,9 @@ func (db *DB) mmap(sz int) error {
 		return err
 	}
 
-	_, _, err = syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), syscall.MADV_RANDOM)
-	if err != nil {
-		return fmt.Errorf("madvise: %s", err)
+	_, _, e := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), syscall.MADV_RANDOM)
+	if e != 0 {
+		return fmt.Errorf("madvise error: %s", e)
 	}
 
 	db.bufferRef = b

@@ -98,7 +98,9 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	allocator.Grow = func(size uint64) error {
+		return db.Grow(size)
+	}
 	db.allocator = allocator
 
 	db.init()
@@ -131,18 +133,19 @@ func (db *DB) initNewDBFile() error {
 		return ErrFailedToCreateDB
 	}
 
-	db.grow(16 * 1024)
+	db.Grow(16 * 1024 * 1024)
 
 	return err
 }
 
-func (db *DB) grow(size uint64) error {
+func (db *DB) Grow(size uint64) error {
 	if err := db.file.Truncate(int64(size)); err != nil {
 		return fmt.Errorf("file resize error: %s", err)
 	}
 	if err := db.file.Sync(); err != nil {
 		return fmt.Errorf("file sync error: %s", err)
 	}
+	db.bufferSize = size
 	return nil
 }
 

@@ -52,7 +52,7 @@ func Test_Tnx(test *testing.T) {
 	t := db.Txn()
 	old, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
-		test.Fatal("Insert failed")
+		test.Fatal("Insert failed value already there")
 	}
 	fmt.Println("old:", old)
 	old, update = t.Insert([]byte("key"), []byte("va"))
@@ -107,12 +107,12 @@ func Test_Tnx(test *testing.T) {
 
 func Test_Get(test *testing.T) {
 
-	db, err := Open("test.db", 0, nil)
+	db, err := Open("/Users/harkal/test.db", 0, nil)
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
 	mm := db.allocator
-	free := db.allocator.TotalFree
+	free := db.allocator.GetFree()
 
 	fmt.Printf("Start: %d\n", free)
 
@@ -150,7 +150,7 @@ func Test_Get(test *testing.T) {
 	*/
 	db.header.root.NodeRelease(mm)
 
-	fmt.Printf("%d %d (%d)\n", free, db.allocator.TotalFree, int(free)-int(db.allocator.TotalFree))
+	fmt.Printf("%d %d (%d)\n", free, db.allocator.GetFree(), int(free)-int(db.allocator.GetFree()))
 
 }
 
@@ -186,7 +186,7 @@ func Test_Get_KeySubset(test *testing.T) {
 }
 
 func Test_InsertGet(t *testing.T) {
-	db, err := Open("test.db", 0, nil)
+	db, err := Open("/Users/harkal/test.db", 0, nil)
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
 	}
@@ -227,7 +227,7 @@ func Test_ByteArrayCreation(t *testing.T) {
 		t.Fatal("Failed to open db")
 	}
 
-	fmt.Printf("Free memory: %d\n", db.allocator.TotalFree)
+	fmt.Printf("Free memory: %d\n", db.allocator.GetFree())
 	mm := db.allocator
 
 	bPtr, b, err := newBytes(mm, 16)
@@ -268,7 +268,7 @@ func Test_ByteArrayCreation(t *testing.T) {
 		t.Fatal("Data corruption")
 	}
 
-	fmt.Printf("Free memory: %d\n", db.allocator.TotalFree)
+	fmt.Printf("Free memory: %d\n", db.allocator.GetFree())
 }
 
 func Test_ByteArrayCloneing(t *testing.T) {
@@ -341,16 +341,16 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 		t.Fatal("Bad ref count")
 	}
 
-	free := db.allocator.TotalFree
+	free := db.allocator.GetFree()
 	b2Ptr.Release(mm)
-	if db.allocator.TotalFree <= free {
+	if db.allocator.GetFree() <= free {
 		t.Fatal("Failed to release")
 	}
 
-	free = db.allocator.TotalFree
+	free = db.allocator.GetFree()
 	bPtr.Release(mm)
 	bPtr.Release(mm)
-	if db.allocator.TotalFree <= free {
+	if db.allocator.GetFree() <= free {
 		t.Fatal("Failed to release")
 	}
 }
