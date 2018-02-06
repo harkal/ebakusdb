@@ -168,7 +168,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	p := chunkPos + allocPreableSize
 
 	if zero {
-		buf := (*[0x9000000000]uint64)(b.GetPtr(p))
+		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))
 		s := (size - allocPreableSize) / uint64(unsafe.Sizeof(uint64(0)))
 		for i := uint64(0); i < s; i++ {
 			buf[i] = 0
