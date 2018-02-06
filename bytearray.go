@@ -7,7 +7,7 @@ import (
 )
 
 func newBytes(mm balloc.MemoryManager, size uint64) (*ByteArray, []byte, error) {
-	offset, err := mm.Allocate(uint64(unsafe.Sizeof(int(0)) + uintptr(size)))
+	offset, err := mm.Allocate(uint64(unsafe.Sizeof(int(0))+uintptr(size)), false)
 	if err != nil {
 		return nil, nil, err
 	}

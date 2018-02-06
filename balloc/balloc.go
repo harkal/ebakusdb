@@ -15,7 +15,7 @@ const alignmentBytes = 8
 const alignmentBytesMinusOne = alignmentBytes - 1
 
 type MemoryManager interface {
-	Allocate(size uint64) (uint64, error)
+	Allocate(size uint64, zero bool) (uint64, error)
 	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
@@ -41,6 +41,14 @@ type chunk struct {
 	prevFree uint64
 	size     uint64
 }
+
+var chunkSize = uint64(unsafe.Sizeof(chunk{}))
+
+type allocPreable struct {
+	size uint64
+}
+
+var allocPreableSize uint64 = uint64(unsafe.Sizeof(allocPreable{}))
 
 // NewBufferAllocator created a new buffer allocator
 func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) (*BufferAllocator, error) {
@@ -72,6 +80,8 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
 	oldSize := b.bufferSize
+
+	firstFree = alignSize(firstFree)
 
 	b.bufferPtr = bufPtr
 	b.bufferSize = bufSize
@@ -105,14 +115,13 @@ func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 }
 
 // Allocate a new buffer of specific size
-func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
+func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	//fmt.Printf("+ allocate %d bytes\n", size)
 	if size == 0 {
 		return 0, ErrInvalidSize
 	}
 
-	chunkSize := uint64(unsafe.Sizeof(chunk{}))
-	//size += chunkSize
+	size += allocPreableSize
 
 	// Ensure alignement
 	size = alignSize(size)
@@ -156,7 +165,15 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 		next.prevFree = newFree
 	}
 
-	p := chunkPos
+	p := chunkPos + allocPreableSize
+
+	if zero {
+		buf := (*[0x9000000000]uint64)(b.GetPtr(p))
+		s := (size - allocPreableSize) / uint64(unsafe.Sizeof(uint64(0)))
+		for i := uint64(0); i < s; i++ {
+			buf[i] = 0
+		}
+	}
 
 	b.header.TotalUsed += size
 
@@ -165,7 +182,7 @@ func (b *BufferAllocator) Allocate(size uint64) (uint64, error) {
 
 func (b *BufferAllocator) Deallocate(offset uint64, size uint64) error {
 	//fmt.Printf("- Deallocate %d bytes\n", size)
-	size += uint64(unsafe.Sizeof(chunk{}))
+	size += allocPreableSize
 	size = alignSize(size)
 	b.header.TotalUsed -= size
 	return nil

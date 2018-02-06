@@ -67,7 +67,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	var err error
 	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		fmt.Println(err)
-		db.close()
+		db.Close()
 		return nil, err
 	}
 
@@ -146,7 +146,7 @@ const megaByte = 1024 * 1024
 const gigaByte = 1024 * megaByte
 
 func (db *DB) Grow() error {
-	if float32(db.allocator.GetFree()) > float32(db.allocator.GetCapacity())*0.2 {
+	if float32(db.allocator.GetFree()) > float32(db.allocator.GetCapacity())*0.3 {
 		return nil
 	}
 
@@ -182,7 +182,17 @@ func (db *DB) Grow() error {
 	return nil
 }
 
-func (db *DB) close() error {
+func (db *DB) Close() error {
+	if err := db.munmap(); err != nil {
+		return fmt.Errorf("Failed to unmap memory error: %s", err)
+	}
+	if err := db.file.Close(); err != nil {
+		return fmt.Errorf("file close error: %s", err)
+	}
+	db.bufferRef = nil
+	db.buffer = nil
+	db.bufferSize = 0
+	db.header = nil
 	return nil
 }
 

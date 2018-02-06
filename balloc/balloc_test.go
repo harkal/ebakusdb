@@ -58,7 +58,7 @@ func Test_AllocateGrow(t *testing.T) {
 		t.Fatal("failed to create buffer")
 	}
 
-	_, err = ba.Allocate(1024)
+	_, err = ba.Allocate(1000)
 	if err != nil {
 		t.Fatal("failed to allocate 1024 bytes")
 	}

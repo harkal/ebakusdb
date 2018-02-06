@@ -8,7 +8,7 @@ import (
 
 func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	size := uint64(unsafe.Sizeof(Node{}))
-	offset, err := mm.Allocate(size)
+	offset, err := mm.Allocate(size, true)
 	if err != nil {
 		return nil, nil, err
 	}

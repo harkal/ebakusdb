@@ -6,10 +6,10 @@ import (
 	"math/rand"
 	"os"
 	"testing"
-	"time"
 )
 
-var src = rand.NewSource(time.Now().UnixNano())
+//var src = rand.NewSource(time.Now().UnixNano())
+var src = rand.NewSource(0)
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const (
@@ -189,7 +189,8 @@ func Test_Get_KeySubset(test *testing.T) {
 }
 
 func Test_InsertGet(t *testing.T) {
-	db, err := Open(tempfile(), 0, nil)
+	fname := tempfile()
+	db, err := Open(fname, 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db")
@@ -223,6 +224,21 @@ func Test_InsertGet(t *testing.T) {
 		}
 	}
 
+	db.Close()
+
+	db, err = Open(fname, 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to reopen db")
+	}
+
+	i := 0
+	for k, v := range data {
+		dv, found := db.Get([]byte(k))
+		if found == false || string(*dv) != string(v) {
+			t.Fatal("Failed", i, dv, v, found)
+		}
+		i++
+	}
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
