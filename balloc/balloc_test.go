@@ -33,17 +33,17 @@ func Test_Allocate(t *testing.T) {
 
 	totalSpace = ba.GetFree()
 
-	_, err = ba.Allocate(1024)
+	_, err = ba.Allocate(1024, true)
 	if err != nil {
 		t.Fatal("failed to allocate 1024 bytes")
 	}
 
-	_, err = ba.Allocate(totalSpace - 100)
+	_, err = ba.Allocate(totalSpace-100, true)
 	if err != balloc.ErrOutOfMemory {
 		t.Fatal("Unexpected error allocating totalSpace - 100 bytes")
 	}
 
-	_, err = ba.Allocate(totalSpace - 2048)
+	_, err = ba.Allocate(totalSpace-2048, true)
 	if err != nil {
 		t.Fatal("Failed allocating totalSpace - 1024 bytes")
 	}
@@ -58,12 +58,12 @@ func Test_AllocateGrow(t *testing.T) {
 		t.Fatal("failed to create buffer")
 	}
 
-	_, err = ba.Allocate(1000)
+	_, err = ba.Allocate(1000, true)
 	if err != nil {
 		t.Fatal("failed to allocate 1024 bytes")
 	}
 
-	_, err = ba.Allocate(200)
+	_, err = ba.Allocate(200, true)
 	if err != balloc.ErrOutOfMemory {
 		t.Fatal("Unexpected error allocating 200 bytes")
 	}
@@ -72,17 +72,17 @@ func Test_AllocateGrow(t *testing.T) {
 	copy(buffer2, buffer)
 	ba.SetBuffer(unsafe.Pointer(&buffer2[0]), uint64(len(buffer2)), 0)
 
-	_, err = ba.Allocate(10)
+	_, err = ba.Allocate(10, true)
 	if err != nil {
 		t.Fatal("failed to allocate 200 bytes")
 	}
 
-	_, err = ba.Allocate(800)
+	_, err = ba.Allocate(800, true)
 	if err != nil {
 		t.Fatal("failed to allocate 200 bytes")
 	}
 
-	_, err = ba.Allocate(24)
+	_, err = ba.Allocate(24, true)
 	if err != nil {
 		t.Fatal("failed to allocate 200 bytes")
 	}
@@ -98,7 +98,7 @@ func Test_Alignment(t *testing.T) {
 		t.Fatal("failed to create buffer")
 	}
 
-	p1, err := ba.Allocate(16)
+	p1, err := ba.Allocate(16, true)
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
@@ -107,7 +107,7 @@ func Test_Alignment(t *testing.T) {
 		t.Fatalf("Allocated buffer not aligned: (%d) %b", p1, p1)
 	}
 
-	p2, err := ba.Allocate(8)
+	p2, err := ba.Allocate(8, true)
 	if err != nil {
 		t.Fatal("failed to allocate 8 bytes")
 	}
@@ -116,7 +116,7 @@ func Test_Alignment(t *testing.T) {
 		t.Fatalf("Allocated buffer not aligned: (%d) %b", p2, p2)
 	}
 
-	p3, err := ba.Allocate(145)
+	p3, err := ba.Allocate(145, true)
 	if err != nil {
 		t.Fatal("failed to allocate 8 bytes")
 	}
@@ -137,7 +137,7 @@ func Test_DeallocateAligned(t *testing.T) {
 	}
 
 	free := ba.GetFree()
-	p1, err := ba.Allocate(16)
+	p1, err := ba.Allocate(16, true)
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
@@ -157,7 +157,7 @@ func Test_DeallocateMissaligned(t *testing.T) {
 	}
 
 	free := ba.GetFree()
-	p1, err := ba.Allocate(15)
+	p1, err := ba.Allocate(15, true)
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
