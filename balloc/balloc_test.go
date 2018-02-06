@@ -70,20 +70,19 @@ func Test_AllocateDeallocate(t *testing.T) {
 
 	ba.PrintFreeChunks()
 
-	if err := ba.Deallocate(ps[1]); err != nil {
+	if err := ba.Deallocate(ps[0]); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
 	ba.PrintFreeChunks()
 
-	if err := ba.Deallocate(ps[0]); err != nil {
+	if err := ba.Deallocate(ps[1]); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
-	/*
-		if err := ba.Deallocate(ps[3]); err != nil {
-			t.Fatal("failed to dellocate 128 bytes")
-		}*/
+	if err := ba.Deallocate(ps[3]); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
 
 	ba.PrintFreeChunks()
 
