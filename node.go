@@ -12,7 +12,7 @@ func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	p := &Ptr{Offset: offset, Size: size}
+	p := &Ptr{Offset: offset}
 	n := p.getNode(mm)
 	n.Retain()
 	return p, n, nil

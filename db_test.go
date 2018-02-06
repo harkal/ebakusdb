@@ -207,7 +207,7 @@ func Test_InsertGet(t *testing.T) {
 
 	data := make(map[string][]byte)
 
-	for i := 0; i < 50000; i++ {
+	for i := 0; i < 10000; i++ {
 		k := RandStringBytesMaskImprSrc(64)
 		v := []byte(RandStringBytesMaskImprSrc(120))
 		data[k] = v
