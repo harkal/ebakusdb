@@ -103,6 +103,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db.init()
 
+	fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
+
 	return db, nil
 }
 

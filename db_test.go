@@ -9,7 +9,7 @@ import (
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
-var src = rand.NewSource(0)
+var src = rand.NewSource(1)
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const (
@@ -235,7 +235,7 @@ func Test_InsertGet(t *testing.T) {
 	for k, v := range data {
 		dv, found := db.Get([]byte(k))
 		if found == false || string(*dv) != string(v) {
-			t.Fatal("Failed", i, dv, v, found)
+			t.Fatalf("Failed %d\n %s\n %s\n (%v)\n", i, string(*dv), string(v), found)
 		}
 		i++
 	}

@@ -49,6 +49,61 @@ func Test_Allocate(t *testing.T) {
 	}
 }
 
+func Test_AllocateDeallocate(t *testing.T) {
+	totalSpace := uint64(1024 * 1024) // 1MB
+	buffer := make([]byte, totalSpace)
+
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	if err != nil || ba == nil {
+		t.Fatal("failed to create buffer")
+	}
+
+	ps := make([]uint64, 0)
+
+	for i := 0; i < 10; i++ {
+		p, err := ba.Allocate(128, true)
+		ps = append(ps, p)
+		if err != nil {
+			t.Fatal("failed to allocate 128 bytes")
+		}
+	}
+
+	ba.PrintFreeChunks()
+
+	if err := ba.Deallocate(ps[1]); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
+
+	ba.PrintFreeChunks()
+
+	if err := ba.Deallocate(ps[0]); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
+
+	/*
+		if err := ba.Deallocate(ps[3]); err != nil {
+			t.Fatal("failed to dellocate 128 bytes")
+		}*/
+
+	ba.PrintFreeChunks()
+
+	p, err := ba.Allocate(128, true)
+	if p != ps[0] {
+		t.Fatal("failed to allocate 128 bytes")
+	}
+
+	_, err = ba.Allocate(64, true)
+	if err != nil {
+		t.Fatal("failed to allocate 64 bytes")
+	}
+
+	p, err = ba.Allocate(64, true)
+	if p != ps[3] {
+		t.Fatal("failed to allocate 64 bytes")
+	}
+
+}
+
 func Test_AllocateGrow(t *testing.T) {
 	totalSpace := uint64(1024 + 48) // 1MB
 	buffer := make([]byte, totalSpace)
@@ -141,7 +196,7 @@ func Test_DeallocateAligned(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
-	ba.Deallocate(p1, 16)
+	ba.Deallocate(p1)
 	if ba.GetFree() < free {
 		t.Fatal("Incorrect free space")
 	}
@@ -161,7 +216,7 @@ func Test_DeallocateMissaligned(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
-	ba.Deallocate(p1, 15)
+	ba.Deallocate(p1)
 	if ba.GetFree() < free {
 		t.Fatal("Incorrect free space")
 	}

@@ -61,6 +61,6 @@ func (b *ByteArray) Release(mm balloc.MemoryManager) {
 	count := b.getBytesRefCount(mm)
 	*count--
 	if *count == 0 {
-		mm.Deallocate(b.Offset, uint64(unsafe.Sizeof(int(0))+uintptr(b.Size)))
+		mm.Deallocate(b.Offset)
 	}
 }

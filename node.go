@@ -40,7 +40,8 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 			ePtr.NodeRelease(mm)
 		}
 
-		mm.Deallocate(nPtr.Offset, nPtr.Size)
+		mm.Deallocate(nPtr.Offset)
+
 		return true
 	}
 
