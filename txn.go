@@ -97,3 +97,23 @@ func (t *Txn) InsertObj(table string, obj interface{}, args ...interface{}) erro
 
 	return nil
 }
+
+func (t *Txn) Select(table string, args ...interface{}) (*ResultIterator, error) {
+	tPtrMarshaled, found := t.Get(getTableKey(table))
+	if found == false {
+		return nil, fmt.Errorf("Unknown table")
+	}
+	var tPtr Ptr
+	t.db.decode(*tPtrMarshaled, &tPtr)
+
+	var iter *Iterator
+
+	if len(args) == 0 {
+		iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+	}
+
+	return &ResultIterator{
+		db:   t.db,
+		iter: iter,
+	}, nil
+}

@@ -90,3 +90,16 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 
 	return nil, nil, false
 }
+
+type ResultIterator struct {
+	db   *DB
+	iter *Iterator
+}
+
+func (ri *ResultIterator) Next(val interface{}) bool {
+	_, value, ok := ri.iter.Next()
+	if ok {
+		ri.db.decode(value, val)
+	}
+	return ok
+}

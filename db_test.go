@@ -319,12 +319,36 @@ func Test_Tables(t *testing.T) {
 	})
 
 	p1 := Phone{
-		Id:    1,
+		Id:    0,
 		Name:  "Harry",
 		Phone: "555-3456",
 	}
 
 	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", Phone{
+		Id:    2,
+		Name:  "Natasa",
+		Phone: "555-5433",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", Phone{
+		Id:    258,
+		Name:  "Aspa",
+		Phone: "555-1111",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", Phone{
+		Id:    1,
+		Name:  "Teo",
+		Phone: "555-2222",
+	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -343,6 +367,17 @@ func Test_Tables(t *testing.T) {
 
 	if _, f := db.Get([]byte("t_PhoneBook")); f != true {
 		t.Fatal("Get failed")
+	}
+
+	txn = db.Txn()
+	iter, err := txn.Select("PhoneBook")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p2 Phone
+	for iter.Next(&p2) {
+		fmt.Printf("%d %s %s\n", p2.Id, p2.Name, p2.Phone)
 	}
 
 }
