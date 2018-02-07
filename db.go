@@ -36,6 +36,11 @@ type DB struct {
 	allocator  *balloc.BufferAllocator
 }
 
+type Snapshot struct {
+	db   *DB
+	root Ptr
+}
+
 const magic uint32 = 0xff01cf11
 const version uint32 = 1
 
@@ -259,4 +264,38 @@ func (db *DB) Get(k []byte) (*[]byte, bool) {
 func (db *DB) Iter() *Iterator {
 	iter := db.header.root.getNode(db.allocator).Iterator(db.allocator)
 	return iter
+}
+
+func (db *DB) Snapshot(id uint64) *Snapshot {
+	if id == 0 {
+		db.header.root.getNode(db.allocator).Retain()
+
+		return &Snapshot{
+			db:   db,
+			root: db.header.root,
+		}
+	}
+
+	return &Snapshot{
+		db:   db,
+		root: Ptr{Offset: id},
+	}
+}
+
+func (snap *Snapshot) Release() {
+	snap.root.NodeRelease(snap.db.allocator)
+}
+
+func (snap *Snapshot) GetId() uint64 {
+	return snap.root.Offset
+}
+
+func (snap *Snapshot) Txn() *Txn {
+	txn := &Txn{
+		db:   snap.db,
+		root: snap.root,
+		snap: snap,
+	}
+	txn.root.getNode(snap.db.allocator).Retain()
+	return txn
 }

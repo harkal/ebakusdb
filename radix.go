@@ -94,6 +94,7 @@ const defaultWritableCache = 8192
 type Txn struct {
 	db       *DB
 	root     Ptr
+	snap     *Snapshot
 	writable *simplelru.LRU
 }
 
@@ -267,9 +268,18 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	return &oVal, didUpdate
 }
 
-func (t *Txn) Commit() error {
+func (t *Txn) Commit() (uint64, error) {
 	t.writable = nil
-	return t.db.Commit(t)
+	t.db.Grow()
+	if t.snap != nil {
+		t.snap.root.NodeRelease(t.db.allocator)
+		t.snap.root = *t.Root()
+	} else {
+		h := t.db.header
+		h.root.NodeRelease(t.db.allocator)
+		h.root = *t.Root()
+	}
+	return t.Root().Offset, nil
 }
 
 func (t *Txn) Rollback() {
@@ -288,9 +298,6 @@ func (t *Txn) Get(k []byte) (*[]byte, bool) {
 }
 
 func (db *DB) Commit(txn *Txn) error {
-	newRootPtr := txn.Root()
-	db.Grow()
-	db.header.root.NodeRelease(db.allocator)
-	db.header.root = *newRootPtr
+	txn.Commit()
 	return nil
 }

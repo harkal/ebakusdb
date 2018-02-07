@@ -107,6 +107,64 @@ func Test_Tnx(test *testing.T) {
 	}
 }
 
+func Test_SnapshotTnx(test *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		test.Fatal("Failed to open db")
+	}
+
+	t := db.Txn()
+	_, update := t.Insert([]byte("key"), []byte("value"))
+	if update == true {
+		test.Fatal("Insert failed value already there")
+	}
+
+	_, update = t.Insert([]byte("harry"), []byte("kalogirou"))
+	if update == true {
+		test.Fatal("Update failed")
+	}
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	snapshot := db.Snapshot(0)
+
+	t = db.Txn()
+	_, update = t.Insert([]byte("harry"), []byte("Kal"))
+	if update == false {
+		test.Fatal("Insert failed")
+	}
+
+	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	tnx := snapshot.Txn()
+
+	if v, _ := tnx.Get([]byte("key")); string(*v) != "value" {
+		test.Fatalf("Get failed (got '%s')", string(*v))
+	}
+
+	// Change should not be visible on this snapshot
+	if v, _ := tnx.Get([]byte("harry")); string(*v) != "kalogirou" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+	// But should be visible here
+	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
+		test.Fatalf("Get failed (got %s)", v)
+	}
+
+}
+
 func Test_Get(test *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
