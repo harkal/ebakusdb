@@ -162,7 +162,6 @@ func Test_SnapshotTnx(test *testing.T) {
 	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
-
 }
 
 func Test_Get(test *testing.T) {
@@ -297,6 +296,55 @@ func Test_InsertGet(t *testing.T) {
 		}
 		i++
 	}
+}
+
+func Test_Tables(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Phone string
+	}
+
+	txn := db.Txn()
+	txn.CreateTable("PhoneBook")
+	txn.CreateIndex(IndexField{
+		table: "PhoneBook",
+		field: "phone",
+	})
+
+	p1 := Phone{
+		Id:    1,
+		Name:  "Harry",
+		Phone: "555-3456",
+	}
+
+	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if _, f := db.Get([]byte("t_PhoneBook")); f != false {
+		t.Fatal("Get failed")
+	}
+
+	if _, f := txn.Get([]byte("t_PhoneBook")); f != true {
+		t.Fatal("Get failed")
+	}
+
+	_, err = txn.Commit()
+	if err != nil {
+		t.Fatal("Commit failed")
+	}
+
+	if _, f := db.Get([]byte("t_PhoneBook")); f != true {
+		t.Fatal("Get failed")
+	}
+
 }
 
 func Test_ByteArrayCreation(t *testing.T) {

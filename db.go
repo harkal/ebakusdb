@@ -1,6 +1,7 @@
 package ebakusdb
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +24,9 @@ var DefaultOptions = &Options{
 	ReadOnly: false,
 }
 
+type DBEncoder func(val interface{}) ([]byte, error)
+type DBDecoder func(b []byte, val interface{}) error
+
 type DB struct {
 	readOnly bool
 
@@ -34,6 +38,9 @@ type DB struct {
 	bufferSize uint64
 	header     *header
 	allocator  *balloc.BufferAllocator
+
+	encode DBEncoder
+	decode DBDecoder
 }
 
 type Snapshot struct {
@@ -61,6 +68,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db := &DB{
 		readOnly: options.ReadOnly,
+		encode:   json.Marshal,
+		decode:   json.Unmarshal,
 	}
 
 	flag := os.O_RDWR
@@ -111,6 +120,11 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
 
 	return db, nil
+}
+
+func (db *DB) SetCustomEncoder(encode DBEncoder, decode DBDecoder) {
+	db.encode = encode
+	db.decode = decode
 }
 
 func (db *DB) GetPath() string {
