@@ -315,7 +315,7 @@ func Test_Tables(t *testing.T) {
 	txn.CreateTable("PhoneBook")
 	txn.CreateIndex(IndexField{
 		table: "PhoneBook",
-		field: "phone",
+		field: "Phone",
 	})
 
 	p1 := Phone{

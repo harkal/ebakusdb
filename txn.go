@@ -6,6 +6,11 @@ import (
 	"reflect"
 )
 
+type Table struct {
+	Indexes []string
+	Node    Ptr
+}
+
 type IndexField struct {
 	table string
 	field string
@@ -38,29 +43,47 @@ func (t *Txn) CreateTable(table string) error {
 	if err != nil {
 		return err
 	}
-	v, _ := t.db.encode(nPtr)
+
+	tlb := Table{
+		Node:    *nPtr,
+		Indexes: make([]string, 0),
+	}
+
+	v, _ := t.db.encode(tlb)
 	t.Insert(getTableKey(table), v)
 	return nil
 }
 
 func (t *Txn) CreateIndex(index IndexField) error {
+	tPtrMarshaled, found := t.Get(getTableKey(index.table))
+	if found == false {
+		return fmt.Errorf("Unknown table")
+	}
+	var tbl Table
+	t.db.decode(*tPtrMarshaled, &tbl)
+
+	tbl.Indexes = append(tbl.Indexes, index.field)
+
+	v, _ := t.db.encode(tbl)
+	t.Insert(getTableKey(index.table), v)
+
 	nPtr, _, err := newNode(t.db.allocator)
 	if err != nil {
 		return err
 	}
-	v, _ := t.db.encode(nPtr)
+	v, _ = t.db.encode(nPtr)
 	t.Insert(index.getIndexKey(), v)
 
 	return nil
 }
 
-func (t *Txn) InsertObj(table string, obj interface{}, args ...interface{}) error {
+func (t *Txn) InsertObj(table string, obj interface{}) error {
 	tPtrMarshaled, found := t.Get(getTableKey(table))
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
-	var tPtr Ptr
-	t.db.decode(*tPtrMarshaled, &tPtr)
+	var tbl Table
+	t.db.decode(*tPtrMarshaled, &tbl)
 
 	v := reflect.ValueOf(obj)
 	v = reflect.Indirect(v)
@@ -84,16 +107,30 @@ func (t *Txn) InsertObj(table string, obj interface{}, args ...interface{}) erro
 	k = encodeKey(k)
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
-	newRoot, _, _ := t.insert(&tPtr, k, k, objPtr)
+	newRoot, _, _ := t.insert(&tbl.Node, k, k, objPtr)
 	objPtr.Release(mm)
 	if newRoot != nil {
-		tPtr.NodeRelease(mm)
-		tPtr = *newRoot
-		tPtrMarshaled, _ := t.db.encode(tPtr)
-		t.Insert(getTableKey(table), tPtrMarshaled)
+		tbl.Node.NodeRelease(mm)
+		tbl.Node = *newRoot
+		tblMarshaled, _ := t.db.encode(tbl)
+		t.Insert(getTableKey(table), tblMarshaled)
 	}
 
 	// Do the additional indexes
+	for _, indexField := range tbl.Indexes {
+		if indexField == "Id" {
+			continue
+		}
+
+		ifield := IndexField{table: table, field: indexField}
+		tPtrMarshaled, found := t.Get(ifield.getIndexKey())
+		if found == false {
+			return fmt.Errorf("Unknown index")
+		}
+		var tPtr Ptr
+		t.db.decode(*tPtrMarshaled, &tPtr)
+
+	}
 
 	return nil
 }
@@ -103,13 +140,13 @@ func (t *Txn) Select(table string, args ...interface{}) (*ResultIterator, error)
 	if found == false {
 		return nil, fmt.Errorf("Unknown table")
 	}
-	var tPtr Ptr
-	t.db.decode(*tPtrMarshaled, &tPtr)
+	var tbl Table
+	t.db.decode(*tPtrMarshaled, &tbl)
 
 	var iter *Iterator
 
 	if len(args) == 0 {
-		iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+		iter = tbl.Node.getNode(t.db.allocator).Iterator(t.db.allocator)
 	} else if len(args) == 2 {
 		indexField := args[0]
 		indexValue := args[1]
@@ -117,7 +154,7 @@ func (t *Txn) Select(table string, args ...interface{}) (*ResultIterator, error)
 		v = reflect.Indirect(v)
 
 		if indexField == "Id" {
-			iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+			iter = tbl.Node.getNode(t.db.allocator).Iterator(t.db.allocator)
 			prefix, err := getEncodedIndexKey(v)
 			if err != nil {
 				return nil, err
