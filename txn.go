@@ -104,10 +104,10 @@ func (t *Txn) InsertObj(table string, obj interface{}) error {
 	if err != nil {
 		return err
 	}
-	k = encodeKey(k)
+	ek := encodeKey(k)
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
-	newRoot, _, _ := t.insert(&tbl.Node, k, k, objPtr)
+	newRoot, _, _ := t.insert(&tbl.Node, ek, ek, objPtr)
 	objPtr.Release(mm)
 	if newRoot != nil {
 		tbl.Node.NodeRelease(mm)
@@ -130,6 +130,26 @@ func (t *Txn) InsertObj(table string, obj interface{}) error {
 		var tPtr Ptr
 		t.db.decode(*tPtrMarshaled, &tPtr)
 
+		fv := v.FieldByName(indexField)
+		if !fv.IsValid() {
+			return fmt.Errorf("Object doesn't have an id field")
+		}
+
+		ik, err := getEncodedIndexKey(fv)
+		if err != nil {
+			return err
+		}
+		ik = encodeKey(ik)
+
+		objPtr := *newBytesFromSlice(mm, k)
+		newRoot, _, _ := t.insert(&tbl.Node, ik, ik, objPtr)
+		objPtr.Release(mm)
+		if newRoot != nil {
+			tPtr.NodeRelease(mm)
+			tPtr = *newRoot
+			tPtrMarshaled, _ := t.db.encode(tPtr)
+			t.Insert(ifield.getIndexKey(), tPtrMarshaled)
+		}
 	}
 
 	return nil
