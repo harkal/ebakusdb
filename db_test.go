@@ -380,6 +380,14 @@ func Test_Tables(t *testing.T) {
 		fmt.Printf("%d %s %s\n", p2.Id, p2.Name, p2.Phone)
 	}
 
+	iter, err = txn.Select("PhoneBook", "Id", uint64(2))
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	for iter.Next(&p2) {
+		fmt.Printf("%d %s %s\n", p2.Id, p2.Name, p2.Phone)
+	}
 }
 
 func Test_ByteArrayCreation(t *testing.T) {

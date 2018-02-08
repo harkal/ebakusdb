@@ -110,6 +110,22 @@ func (t *Txn) Select(table string, args ...interface{}) (*ResultIterator, error)
 
 	if len(args) == 0 {
 		iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+	} else if len(args) == 2 {
+		indexField := args[0]
+		indexValue := args[1]
+		v := reflect.ValueOf(indexValue)
+		v = reflect.Indirect(v)
+
+		if indexField == "Id" {
+			iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+			prefix, err := getEncodedIndexKey(v)
+			if err != nil {
+				return nil, err
+			}
+			iter.SeekPrefix(prefix)
+		}
+	} else {
+		return nil, fmt.Errorf("Bad query")
 	}
 
 	return &ResultIterator{
