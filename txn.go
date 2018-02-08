@@ -132,7 +132,7 @@ func (t *Txn) InsertObj(table string, obj interface{}) error {
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
-			return fmt.Errorf("Object doesn't have an id field")
+			return fmt.Errorf("Object doesn't have an %s field", indexField)
 		}
 
 		ik, err := getEncodedIndexKey(fv)
@@ -141,9 +141,9 @@ func (t *Txn) InsertObj(table string, obj interface{}) error {
 		}
 		ik = encodeKey(ik)
 
-		objPtr := *newBytesFromSlice(mm, k)
-		newRoot, _, _ := t.insert(&tbl.Node, ik, ik, objPtr)
-		objPtr.Release(mm)
+		pKeyPtr := *newBytesFromSlice(mm, k)
+		newRoot, _, _ := t.insert(&tPtr, ik, ik, pKeyPtr)
+		pKeyPtr.Release(mm)
 		if newRoot != nil {
 			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
@@ -164,29 +164,59 @@ func (t *Txn) Select(table string, args ...interface{}) (*ResultIterator, error)
 	t.db.decode(*tPtrMarshaled, &tbl)
 
 	var iter *Iterator
+	var tblNode *Node
 
 	if len(args) == 0 {
 		iter = tbl.Node.getNode(t.db.allocator).Iterator(t.db.allocator)
-	} else if len(args) == 2 {
-		indexField := args[0]
-		indexValue := args[1]
-		v := reflect.ValueOf(indexValue)
-		v = reflect.Indirect(v)
+	} else if len(args) > 0 {
+		indexField, ok := args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("Field names should be strings")
+		}
+
+		var v reflect.Value
+		if len(args) >= 2 {
+			indexValue := args[1]
+			v = reflect.ValueOf(indexValue)
+			v = reflect.Indirect(v)
+		}
 
 		if indexField == "Id" {
 			iter = tbl.Node.getNode(t.db.allocator).Iterator(t.db.allocator)
-			prefix, err := getEncodedIndexKey(v)
-			if err != nil {
-				return nil, err
+			if len(args) >= 2 {
+				prefix, err := getEncodedIndexKey(v)
+				if err != nil {
+					return nil, err
+				}
+				iter.SeekPrefix(prefix)
 			}
-			iter.SeekPrefix(prefix)
+		} else {
+			ifield := IndexField{table: table, field: indexField}
+			tPtrMarshaled, found := t.Get(ifield.getIndexKey())
+			if found == false {
+				return nil, fmt.Errorf("Unknown index")
+			}
+			var tPtr Ptr
+			t.db.decode(*tPtrMarshaled, &tPtr)
+			iter = tPtr.getNode(t.db.allocator).Iterator(t.db.allocator)
+
+			if len(args) >= 2 {
+				prefix, err := getEncodedIndexKey(v)
+				if err != nil {
+					return nil, err
+				}
+				iter.SeekPrefix(prefix)
+			}
+
+			tblNode = tbl.Node.getNode(t.db.allocator)
 		}
 	} else {
 		return nil, fmt.Errorf("Bad query")
 	}
 
 	return &ResultIterator{
-		db:   t.db,
-		iter: iter,
+		db:        t.db,
+		iter:      iter,
+		tableRoot: tblNode,
 	}, nil
 }

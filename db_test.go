@@ -382,11 +382,46 @@ func Test_Tables(t *testing.T) {
 
 	iter, err = txn.Select("PhoneBook", "Id", uint64(2))
 	if err != nil {
-		t.Fatal("Failed to create iterator")
+		t.Fatal("Failed to create iterator error:", err)
 	}
 
-	for iter.Next(&p2) {
-		fmt.Printf("%d %s %s\n", p2.Id, p2.Name, p2.Phone)
+	iter.Next(&p2)
+	if p2.Id != 2 {
+		t.Fatal("Returned wrong row")
+	}
+	more := iter.Next(&p2)
+	if more != false {
+		t.Fatal("Returned more the one result")
+	}
+
+	// Search with secondary index
+	iter, err = txn.Select("PhoneBook", "Phone", "555-2222")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+	iter.Next(&p2)
+	if p2.Id != 1 {
+		t.Fatal("Returned wrong row")
+	}
+	more = iter.Next(&p2)
+	if more != false {
+		t.Fatal("Returned more the one result")
+	}
+
+	// Order by secondary index
+	iter, err = txn.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	iter.Next(&p2)
+	if p2.Id != 258 {
+		t.Fatal("Returned wrong row")
+	}
+
+	iter.Next(&p2)
+	if p2.Id != 1 {
+		t.Fatal("Returned wrong row")
 	}
 }
 

@@ -94,12 +94,25 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 type ResultIterator struct {
 	db   *DB
 	iter *Iterator
+
+	tableRoot *Node
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
 	_, value, ok := ri.iter.Next()
-	if ok {
+	if !ok {
+		return ok
+	}
+	if ri.tableRoot != nil {
+		pKey := encodeKey(value)
+		value, ok := ri.tableRoot.Get(ri.db, pKey)
+		if !ok {
+			return false
+		}
+		ri.db.decode(*value, val)
+	} else {
 		ri.db.decode(value, val)
 	}
+
 	return ok
 }
