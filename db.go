@@ -27,6 +27,19 @@ var DefaultOptions = &Options{
 type DBEncoder func(val interface{}) ([]byte, error)
 type DBDecoder func(b []byte, val interface{}) error
 
+// Reader interface
+type DBReader interface {
+	Get(k []byte) (*[]byte, bool)
+	HasTable(table string) bool
+}
+
+type DBAccess interface {
+	DBReader
+	CreateTable(table string) error
+	CreateIndex(index IndexField) error
+	Txn() *Txn
+}
+
 type DB struct {
 	readOnly bool
 
@@ -41,11 +54,6 @@ type DB struct {
 
 	encode DBEncoder
 	decode DBDecoder
-}
-
-type Snapshot struct {
-	db   *DB
-	root Ptr
 }
 
 const magic uint32 = 0xff01cf11
@@ -117,7 +125,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db.init()
 
-	fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
+	//fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
 
 	return db, nil
 }
@@ -275,6 +283,35 @@ func (db *DB) Get(k []byte) (*[]byte, bool) {
 	return db.header.root.getNode(db.allocator).Get(db, k)
 }
 
+func (db *DB) CreateTable(table string) error {
+	txn := db.Txn()
+	err := txn.CreateTable(table)
+	if err != nil {
+		txn.Rollback()
+		return err
+	}
+	_, err = txn.Commit()
+	return err
+}
+
+func (db *DB) CreateIndex(index IndexField) error {
+	txn := db.Txn()
+	err := txn.CreateIndex(index)
+	if err != nil {
+		txn.Rollback()
+		return err
+	}
+	_, err = txn.Commit()
+	return err
+}
+
+func (db *DB) HasTable(table string) bool {
+	txn := db.Txn()
+	exists := txn.HasTable(table)
+	txn.Rollback()
+	return exists
+}
+
 func (db *DB) Iter() *Iterator {
 	iter := db.header.root.getNode(db.allocator).Iterator(db.allocator)
 	return iter
@@ -294,22 +331,4 @@ func (db *DB) Snapshot(id uint64) *Snapshot {
 		db:   db,
 		root: Ptr{Offset: id},
 	}
-}
-
-func (snap *Snapshot) Release() {
-	snap.root.NodeRelease(snap.db.allocator)
-}
-
-func (snap *Snapshot) GetId() uint64 {
-	return snap.root.Offset
-}
-
-func (snap *Snapshot) Txn() *Txn {
-	txn := &Txn{
-		db:   snap.db,
-		root: snap.root,
-		snap: snap,
-	}
-	txn.root.getNode(snap.db.allocator).Retain()
-	return txn
 }

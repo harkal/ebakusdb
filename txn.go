@@ -54,6 +54,12 @@ func (t *Txn) CreateTable(table string) error {
 	return nil
 }
 
+func (t *Txn) HasTable(table string) bool {
+	_, exists := t.Get(getTableKey(table))
+
+	return exists
+}
+
 func (t *Txn) CreateIndex(index IndexField) error {
 	tPtrMarshaled, found := t.Get(getTableKey(index.table))
 	if found == false {
