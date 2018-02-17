@@ -41,7 +41,7 @@ type header struct {
 type chunk struct {
 	nextFree uint64 // zero if occupied
 	prevFree uint64
-	size     uint64
+	size     uint32
 }
 
 var chunkSize = uint64(unsafe.Sizeof(chunk{}))
@@ -75,7 +75,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 		buffer.header.TotalUsed = 0
 
 		c := buffer.getChunk(buffer.header.firstFreeChunk)
-		c.size = bufSize - buffer.header.firstFreeChunk
+		c.size = uint32(bufSize - buffer.header.firstFreeChunk)
 		c.nextFree = 0
 	}
 
@@ -103,7 +103,7 @@ func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, first
 	c.nextFree = oldSize
 	nc.prevFree = chunkPos
 	nc.nextFree = 0
-	nc.size = bufSize - oldSize
+	nc.size = uint32(bufSize - oldSize)
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
@@ -138,7 +138,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	var c *chunk
 	for chunkPos != 0 {
 		c = b.getChunk(chunkPos)
-		if c.size >= size+chunkSize {
+		if c.size >= uint32(size+chunkSize) {
 			break
 		}
 		chunkPos = c.nextFree
@@ -148,12 +148,14 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		return 0, ErrOutOfMemory
 	}
 
-	c.size -= size
+	c.size -= uint32(size)
 
 	newFree := chunkPos + size
 	nc := b.getChunk(newFree)
 	if nc != nil {
-		*nc = *c
+		nc.nextFree = c.nextFree
+		nc.prevFree = c.prevFree
+		nc.size = c.size
 	} else {
 		newFree = 0
 	}
@@ -189,61 +191,62 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 }
 
 func (b *BufferAllocator) Deallocate(offset uint64) error {
-	size := b.getPreample(offset).size
-	offset -= allocPreableSize
+	/*
+		size := b.getPreample(offset).size
+		offset -= allocPreableSize
 
-	//fmt.Printf("- Deallocate %d bytes at %d\n", size, offset)
-	if offset >= uint64(b.header.bufferStart) && offset < b.header.firstFreeChunk {
-		nc := b.getChunk(offset)
-		nc.prevFree = 0
-		nc.nextFree = b.header.firstFreeChunk
+		//fmt.Printf("- Deallocate %d bytes at %d\n", size, offset)
+		if offset >= uint64(b.header.bufferStart) && offset < b.header.firstFreeChunk {
+			nc := b.getChunk(offset)
+			nc.prevFree = 0
+			nc.nextFree = b.header.firstFreeChunk
+			nc.size = size
+
+			chunkNext := b.getChunk(b.header.firstFreeChunk)
+			chunkNext.prevFree = offset
+
+			b.header.firstFreeChunk = offset
+
+			b.header.TotalUsed -= size
+			return nil
+		}
+
+		chunkPrePos := b.header.firstFreeChunk
+		var chunkPre *chunk
+		for chunkPrePos != 0 {
+			chunkPre = b.getChunk(chunkPrePos)
+			if rangeContains(chunkPrePos, chunkPre.size, offset) {
+				return fmt.Errorf("Memory segmentation error %d already free in (%d,%d)", offset, chunkPrePos, chunkPre.size)
+			}
+
+			if offset >= chunkPrePos+chunkPre.size && offset < chunkPre.nextFree {
+				break
+			}
+
+			chunkPrePos = chunkPre.nextFree
+		}
+
+		// Attached next to previous
+		if chunkPrePos+chunkPre.size == offset {
+			chunkPre.size += size
+			b.header.TotalUsed -= size
+			return nil
+		}
+
+		newFree := offset
+		nc := b.getChunk(newFree)
+		nc.prevFree = chunkPrePos
+		nc.nextFree = chunkPre.nextFree
 		nc.size = size
 
-		chunkNext := b.getChunk(b.header.firstFreeChunk)
-		chunkNext.prevFree = offset
-
-		b.header.firstFreeChunk = offset
+		if chunkPre.nextFree != 0 {
+			chunkNext := b.getChunk(chunkPre.nextFree)
+			chunkNext.prevFree = newFree
+		}
+		chunkPre.nextFree = newFree
 
 		b.header.TotalUsed -= size
-		return nil
-	}
-
-	chunkPrePos := b.header.firstFreeChunk
-	var chunkPre *chunk
-	for chunkPrePos != 0 {
-		chunkPre = b.getChunk(chunkPrePos)
-		if rangeContains(chunkPrePos, chunkPre.size, offset) {
-			return fmt.Errorf("Memory segmentation error %d already free in (%d,%d)", offset, chunkPrePos, chunkPre.size)
-		}
-
-		if offset >= chunkPrePos+chunkPre.size && offset < chunkPre.nextFree {
-			break
-		}
-
-		chunkPrePos = chunkPre.nextFree
-	}
-
-	// Attached next to previous
-	if chunkPrePos+chunkPre.size == offset {
-		chunkPre.size += size
-		b.header.TotalUsed -= size
-		return nil
-	}
-
-	newFree := offset
-	nc := b.getChunk(newFree)
-	nc.prevFree = chunkPrePos
-	nc.nextFree = chunkPre.nextFree
-	nc.size = size
-
-	if chunkPre.nextFree != 0 {
-		chunkNext := b.getChunk(chunkPre.nextFree)
-		chunkNext.prevFree = newFree
-	}
-	chunkPre.nextFree = newFree
-
-	b.header.TotalUsed -= size
-
+	*/
 	return nil
 }
 
@@ -271,11 +274,11 @@ func (b *BufferAllocator) PrintFreeChunks() {
 	for chunkPos != 0 {
 		c = b.getChunk(chunkPos)
 
-		fmt.Printf("Free chunk %d to %d (size: %d)\n", chunkPos, chunkPos+c.size-1, c.size)
+		fmt.Printf("Free chunk %d to %d (size: %d)\n", chunkPos, uint32(chunkPos)+c.size-1, c.size)
 
 		chunkPos = c.nextFree
 		i++
-		s += c.size
+		s += uint64(c.size)
 	}
 	fmt.Printf("---------------------------------------\n")
 	fmt.Printf("  Total free chunks: %d\n", i)
