@@ -6,7 +6,7 @@ import (
 	"github.com/harkal/ebakusdb/balloc"
 )
 
-func newBytes(mm balloc.MemoryManager, size uint64) (*ByteArray, []byte, error) {
+func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) {
 	offset, err := mm.Allocate(uint64(unsafe.Sizeof(int(0))+uintptr(size)), false)
 	if err != nil {
 		return nil, nil, err
@@ -18,7 +18,7 @@ func newBytes(mm balloc.MemoryManager, size uint64) (*ByteArray, []byte, error) 
 }
 
 func newBytesFromSlice(mm balloc.MemoryManager, data []byte) *ByteArray {
-	aPtr, a, err := newBytes(mm, uint64(len(data)))
+	aPtr, a, err := newBytes(mm, uint32(len(data)))
 	if err != nil {
 		panic(err)
 	}

@@ -279,7 +279,7 @@ func (t *Txn) Commit() (uint64, error) {
 		h.root.NodeRelease(t.db.allocator)
 		h.root = *t.Root()
 	}
-	return t.Root().Offset, nil
+	return uint64(*t.Root()), nil
 }
 
 func (t *Txn) Rollback() {

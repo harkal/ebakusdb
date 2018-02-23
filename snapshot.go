@@ -10,7 +10,7 @@ func (snap *Snapshot) Release() {
 }
 
 func (snap *Snapshot) GetId() uint64 {
-	return snap.root.Offset
+	return uint64(snap.root)
 }
 
 func (snap *Snapshot) Txn() *Txn {

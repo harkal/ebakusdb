@@ -67,7 +67,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 		bufferSize: bufSize,
 	}
 
-	firstFreeNode := alignSize(firstFree + 700*1024)
+	firstFreeNode := alignSize(firstFree + 1024*1024*1024)
 	firstFree = alignSize(firstFree)
 	buffer.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
 
@@ -262,11 +262,17 @@ func (b *BufferAllocator) AllocateNode(zero bool) (uint64, error) {
 			buf[i] = 0
 		}
 	}
-
 	return p, nil
 }
 
 func (b *BufferAllocator) DeallocateNode(pos uint64) error {
+	buf := (*[maxBufferSize]uint64)(b.GetPtr(pos))
+	if false {
+		nodeSize := uint64(b.header.nodeSize)
+		for i := uint64(0); i < nodeSize; i++ {
+			buf[i] = 0
+		}
+	}
 	return nil
 }
 
