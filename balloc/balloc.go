@@ -252,13 +252,13 @@ func (b *BufferAllocator) Deallocate(offset uint64) error {
 func (b *BufferAllocator) AllocateNode(zero bool) (uint64, error) {
 	p := b.header.firstFreeNode
 
-	nodeSize := uint64(b.header.nodeSize)
+	nodeSize := b.header.nodeSize
 
-	b.header.firstFreeNode += nodeSize
+	b.header.firstFreeNode += uint64(nodeSize)
 
 	if zero {
 		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))
-		for i := uint64(0); i < nodeSize; i++ {
+		for i := uint16(0); i < nodeSize; i++ {
 			buf[i] = 0
 		}
 	}
