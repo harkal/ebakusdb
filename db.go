@@ -107,6 +107,13 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.mmap(int(info.Size()))
 
+	db.bufferSize = 4 * 1024 * 1024 * 1024
+	db.bufferRef = make([]byte, db.bufferSize)
+	db.buffer = (*[0x9000000000]byte)(unsafe.Pointer(&db.bufferRef[0]))
+	h := (*header)(unsafe.Pointer(&db.bufferRef[0]))
+	h.magic = magic
+	h.version = version
+
 	headerSize := unsafe.Sizeof(header{})
 	db.header = (*header)(unsafe.Pointer(&db.bufferRef[0]))
 	if db.header.magic != magic {
@@ -120,6 +127,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	allocator.SetNodeSize(uint16(unsafe.Sizeof(Node{})))
 
 	db.allocator = allocator
 
@@ -164,7 +173,7 @@ func (db *DB) initNewDBFile() error {
 		return ErrFailedToCreateDB
 	}
 
-	if err := db.file.Truncate(megaByte); err != nil {
+	if err := db.file.Truncate(gigaByte); err != nil {
 		return fmt.Errorf("file resize error: %s", err)
 	}
 

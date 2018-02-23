@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"testing"
+	"unsafe"
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
@@ -50,6 +51,8 @@ func Test_Tnx(test *testing.T) {
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
+
+	fmt.Println(unsafe.Sizeof([1]byte{}))
 
 	t := db.Txn()
 	old, update := t.Insert([]byte("key"), []byte("value"))
@@ -264,7 +267,7 @@ func Test_InsertGet(t *testing.T) {
 
 	data := make(map[string][]byte)
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1; i++ {
 		k := RandStringBytesMaskImprSrc(64)
 		v := []byte(RandStringBytesMaskImprSrc(120))
 		data[k] = v

@@ -9,6 +9,7 @@ import (
 func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	size := uint64(unsafe.Sizeof(Node{}))
 	offset, err := mm.Allocate(size, true)
+	//offset, err := mm.AllocateNode(true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -41,6 +42,7 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 		}
 
 		mm.Deallocate(nPtr.Offset)
+		//mm.DeallocateNode(nPtr.Offset)
 
 		return true
 	}

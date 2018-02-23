@@ -19,6 +19,9 @@ type MemoryManager interface {
 	Allocate(size uint64, zero bool) (uint64, error)
 	Deallocate(pos uint64) error
 
+	AllocateNode(zero bool) (uint64, error)
+	DeallocateNode(pos uint64) error
+
 	GetPtr(pos uint64) unsafe.Pointer
 }
 
@@ -34,13 +37,14 @@ const magic uint32 = 0xca01af01
 type header struct {
 	magic          uint32
 	bufferStart    uint32
+	nodeSize       uint16
+	firstFreeNode  uint64
 	firstFreeChunk uint64
 	TotalUsed      uint64
 }
 
 type chunk struct {
 	nextFree uint64 // zero if occupied
-	prevFree uint64
 	size     uint32
 }
 
@@ -63,6 +67,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 		bufferSize: bufSize,
 	}
 
+	firstFreeNode := alignSize(firstFree + 700*1024)
 	firstFree = alignSize(firstFree)
 	buffer.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
 
@@ -71,6 +76,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 
 		buffer.header.magic = magic
 		buffer.header.bufferStart = uint32(alignSize(firstFree))
+		buffer.header.firstFreeNode = firstFreeNode
 		buffer.header.firstFreeChunk = uint64(alignSize(firstFree))
 		buffer.header.TotalUsed = 0
 
@@ -80,6 +86,10 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 	}
 
 	return buffer, nil
+}
+
+func (b *BufferAllocator) SetNodeSize(s uint16) {
+	b.header.nodeSize = s
 }
 
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
@@ -101,7 +111,6 @@ func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, first
 
 	nc := b.getChunk(oldSize)
 	c.nextFree = oldSize
-	nc.prevFree = chunkPos
 	nc.nextFree = 0
 	nc.size = uint32(bufSize - oldSize)
 }
@@ -154,22 +163,12 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	nc := b.getChunk(newFree)
 	if nc != nil {
 		nc.nextFree = c.nextFree
-		nc.prevFree = c.prevFree
 		nc.size = c.size
 	} else {
 		newFree = 0
 	}
 
-	prev := b.getChunk(c.prevFree)
-	if prev != nil {
-		prev.nextFree = newFree
-	} else {
-		b.header.firstFreeChunk = newFree
-	}
-	next := b.getChunk(c.nextFree)
-	if next != nil {
-		next.prevFree = newFree
-	}
+	b.header.firstFreeChunk = newFree
 
 	p := chunkPos + allocPreableSize
 
@@ -247,6 +246,27 @@ func (b *BufferAllocator) Deallocate(offset uint64) error {
 
 		b.header.TotalUsed -= size
 	*/
+	return nil
+}
+
+func (b *BufferAllocator) AllocateNode(zero bool) (uint64, error) {
+	p := b.header.firstFreeNode
+
+	nodeSize := uint64(b.header.nodeSize)
+
+	b.header.firstFreeNode += nodeSize
+
+	if zero {
+		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))
+		for i := uint64(0); i < nodeSize; i++ {
+			buf[i] = 0
+		}
+	}
+
+	return p, nil
+}
+
+func (b *BufferAllocator) DeallocateNode(pos uint64) error {
 	return nil
 }
 
