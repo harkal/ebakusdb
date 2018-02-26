@@ -8,13 +8,14 @@ import (
 
 func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	size := uint64(unsafe.Sizeof(Node{}))
-	offset, err := mm.Allocate(size, false)
+	offset, err := mm.Allocate(size, true)
 	if err != nil {
 		return nil, nil, err
 	}
 	p := Ptr(offset)
 	n := p.getNode(mm)
-	*n = Node{RefCountedObject: RefCountedObject{refCount: 1}}
+	n.refCount = 1
+	//*n = Node{RefCountedObject: RefCountedObject{refCount: 1}}
 	return &p, n, nil
 }
 
