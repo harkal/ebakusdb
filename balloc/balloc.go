@@ -83,26 +83,11 @@ func (b *BufferAllocator) SetPageSize(s uint16) {
 }
 
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
-	oldSize := b.bufferSize
-
 	firstFree = alignSize(firstFree)
 
 	b.bufferPtr = bufPtr
 	b.bufferSize = bufSize
 	b.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
-
-	// find last free chunk
-	chunkPos := b.header.firstFreeData
-	c := b.getChunk(chunkPos)
-	for c.nextFree != 0 {
-		chunkPos = c.nextFree
-		c = b.getChunk(chunkPos)
-	}
-
-	nc := b.getChunk(oldSize)
-	c.nextFree = oldSize
-	nc.nextFree = 0
-	nc.size = uint32(bufSize - oldSize)
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
@@ -132,9 +117,9 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	p := b.header.firstFreeData
 	b.header.firstFreeData += pagesNeeded * psize
 
-	if false {
-		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))
-		for i := uint64(0); i < size; i++ {
+	if zero {
+		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))[:size]
+		for i := range buf {
 			buf[i] = 0
 		}
 	}
