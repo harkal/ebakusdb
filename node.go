@@ -1,13 +1,14 @@
 package ebakusdb
 
 import (
+	"unsafe"
+
 	"github.com/harkal/ebakusdb/balloc"
 )
 
 func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
-	//size := uint64(unsafe.Sizeof(Node{}))
-	//offset, err := mm.Allocate(size, true)
-	offset, err := mm.AllocateNode(false)
+	size := uint64(unsafe.Sizeof(Node{}))
+	offset, err := mm.Allocate(size, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -39,8 +40,8 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 			ePtr.NodeRelease(mm)
 		}
 
-		//mm.Deallocate(nPtr.Offset)
-		mm.DeallocateNode(uint64(*nPtr))
+		mm.Deallocate(uint64(*nPtr))
+		//mm.DeallocateNode(uint64(*nPtr))
 
 		return true
 	}
