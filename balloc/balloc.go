@@ -35,7 +35,8 @@ type header struct {
 	magic         uint32
 	bufferStart   uint32
 	pageSize      uint16
-	firstFreeData uint64
+	dataWatermark uint64
+	freePage      uint64
 	TotalUsed     uint64
 }
 
@@ -71,7 +72,8 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 
 		buffer.header.magic = magic
 		buffer.header.bufferStart = uint32(alignSize(firstFree))
-		buffer.header.firstFreeData = uint64(alignSize(firstFree))
+		buffer.header.dataWatermark = uint64(alignSize(firstFree))
+		buffer.header.freePage = 0
 		buffer.header.TotalUsed = 0
 	}
 
@@ -116,8 +118,8 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	pagesNeeded := (size + psize - 1) / psize
 
-	p := b.header.firstFreeData
-	b.header.firstFreeData += pagesNeeded * psize
+	p := b.header.dataWatermark
+	b.header.dataWatermark += pagesNeeded * psize
 
 	if zero {
 		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))[:size]
@@ -212,7 +214,7 @@ func (b *BufferAllocator) getPreample(offset uint64) *allocPreable {
 }
 
 func (b *BufferAllocator) PrintFreeChunks() {
-	chunkPos := b.header.firstFreeData
+	chunkPos := b.header.dataWatermark
 	var c *chunk
 	i := 0
 	s := uint64(0)
