@@ -107,8 +107,8 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.mmap(int(info.Size()))
 
-	//	db.bufferSize = 8 * 1024 * 1024 * 1024
-	//	db.bufferRef = make([]byte, db.bufferSize)
+	//db.bufferSize = 8 * 1024 * 1024 * 1024
+	//db.bufferRef = make([]byte, db.bufferSize)
 	db.buffer = (*[0x9000000000]byte)(unsafe.Pointer(&db.bufferRef[0]))
 	h := (*header)(unsafe.Pointer(&db.bufferRef[0]))
 	h.magic = magic

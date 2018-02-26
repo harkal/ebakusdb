@@ -102,6 +102,8 @@ func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(b.bufferPtr) + uintptr(pos))
 }
 
+var dummy uint64
+
 // Allocate a new buffer of specific size
 func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	if size == 0 {
@@ -123,6 +125,9 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 			buf[i] = 0
 		}
 	}
+
+	//	buf := (*[maxBufferSize]uint64)(b.GetPtr(b.header.firstFreeData))
+	//	dummy = buf[4096]
 
 	b.header.TotalUsed += pagesNeeded * psize
 

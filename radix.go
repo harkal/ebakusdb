@@ -98,7 +98,7 @@ type Txn struct {
 	writable *simplelru.LRU
 }
 
-func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
+func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 	mm := t.db.allocator
 	if t.writable == nil {
 		lru, err := simplelru.NewLRU(defaultWritableCache, nil)
@@ -111,9 +111,12 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 	n := nodePtr.getNode(mm)
 
 	if _, ok := t.writable.Get(*nodePtr); ok {
+		//println("hit", t.writable.Len())
 		n.Retain()
 		return nodePtr
 	}
+
+	//println("miss", t.writable.Len())
 
 	ncPtr, nc, err := newNode(mm)
 	if err != nil {
@@ -136,7 +139,8 @@ func (t *Txn) writeNode(nodePtr *Ptr, forLeafUpdate bool) *Ptr {
 		edgeNode.getNode(mm).Retain()
 	}
 
-	t.writable.Add(ncPtr, nil)
+	t.writable.Add(*ncPtr, nil)
+
 	return ncPtr
 }
 
@@ -154,7 +158,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 			oldVal.Retain(mm)
 		}
 
-		ncPtr := t.writeNode(nodePtr, true)
+		ncPtr := t.writeNode(nodePtr)
 		nc := ncPtr.getNode(mm)
 
 		nc.keyPtr = *newBytesFromSlice(mm, k)
@@ -179,7 +183,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		nn.valPtr.Retain(mm)
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
-		nc := t.writeNode(nodePtr, false)
+		nc := t.writeNode(nodePtr)
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
 		return nc, nil, false
 	}
@@ -193,7 +197,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		search = search[commonPrefix:]
 		newChildPtr, oldVal, didUpdate := t.insert(&childPtr, k, search, vPtr)
 		if newChildPtr != nil {
-			ncPtr := t.writeNode(nodePtr, false)
+			ncPtr := t.writeNode(nodePtr)
 			nc := ncPtr.getNode(mm)
 			nc.edges[edgeLabel] = *newChildPtr
 			return ncPtr, oldVal, didUpdate
@@ -202,7 +206,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	}
 
 	// Split the node
-	ncPtr := t.writeNode(nodePtr, false)
+	ncPtr := t.writeNode(nodePtr)
 	nc := ncPtr.getNode(mm)
 
 	splitNodePtr, splitNode, err := newNode(mm)
@@ -216,7 +220,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	nc.edges[search[0]] = *splitNodePtr
 
 	// Restore the existing child node
-	modChildPtr := t.writeNode(&childPtr, false)
+	modChildPtr := t.writeNode(&childPtr)
 	modChild := modChildPtr.getNode(mm)
 	pref := modChild.prefixPtr.getBytes(mm)
 

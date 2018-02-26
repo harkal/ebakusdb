@@ -12,7 +12,7 @@ func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) 
 		return nil, nil, err
 	}
 	aPtr := &ByteArray{Offset: offset, Size: size}
-	aPtr.Retain(mm)
+	*aPtr.getBytesRefCount(mm) = 1
 	a := aPtr.getBytes(mm)
 	return aPtr, a, nil
 }
