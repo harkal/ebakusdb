@@ -129,8 +129,6 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, err
 	}
 
-	//allocator.SetPageSize(4096 / 2)
-
 	db.allocator = allocator
 
 	db.init()

@@ -185,6 +185,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 		nc := t.writeNode(nodePtr)
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
+		nnPtr.getNode(mm).Retain()
 		return nc, nil, false
 	}
 
@@ -216,7 +217,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
-	nc.edges[search[0]].NodeRelease(mm)
+	//nc.edges[search[0]].NodeRelease(mm)
 	nc.edges[search[0]] = *splitNodePtr
 
 	// Restore the existing child node
