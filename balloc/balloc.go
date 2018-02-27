@@ -17,7 +17,7 @@ const alignmentBytesMinusOne = alignmentBytes - 1
 
 type MemoryManager interface {
 	Allocate(size uint64, zero bool) (uint64, error)
-	Deallocate(pos uint64) error
+	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
 }
@@ -54,7 +54,7 @@ type allocPreable struct {
 var allocPreableSize uint64 = uint64(unsafe.Sizeof(allocPreable{}))
 
 // NewBufferAllocator created a new buffer allocator
-func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) (*BufferAllocator, error) {
+func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64, pageSize uint16) (*BufferAllocator, error) {
 	if bufSize&alignmentBytesMinusOne != 0 {
 		return nil, ErrInvalidSize
 	}
@@ -65,14 +65,17 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64)
 	}
 
 	firstFree = alignSize(firstFree)
+
 	buffer.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
+	buffer.SetPageSize(pageSize)
 
 	if buffer.header.magic != magic {
-		firstFree += uint64(unsafe.Sizeof(*buffer.header))
+		dataStart := alignSize(firstFree + uint64(unsafe.Sizeof(*buffer.header)))
+		dataStart = buffer.GetPageOffset(dataStart + uint64(pageSize) - 1)
 
 		buffer.header.magic = magic
-		buffer.header.bufferStart = uint32(alignSize(firstFree))
-		buffer.header.dataWatermark = uint64(alignSize(firstFree))
+		buffer.header.bufferStart = uint32(dataStart)
+		buffer.header.dataWatermark = dataStart
 		buffer.header.freePage = 0
 		buffer.header.TotalUsed = 0
 	}
@@ -84,12 +87,17 @@ func (b *BufferAllocator) SetPageSize(s uint16) {
 	b.header.pageSize = s
 }
 
+func (b *BufferAllocator) GetPageOffset(offset uint64) uint64 {
+	psize := uint64(b.header.pageSize)
+	return (offset / psize) * psize
+}
+
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
-	firstFree = alignSize(firstFree)
+	firstFree = alignSize(firstFree + uint64(uintptr(bufPtr)))
 
 	b.bufferPtr = bufPtr
 	b.bufferSize = bufSize
-	b.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
+	b.header = (*header)(unsafe.Pointer(uintptr(firstFree)))
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
@@ -118,6 +126,14 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	pagesNeeded := (size + psize - 1) / psize
 
+	if b.header.freePage != 0 && pagesNeeded == 1 {
+		p := b.header.freePage
+		l := (*uint64)(b.GetPtr(b.header.freePage))
+		b.header.freePage = *l
+		println("allocate page", p, "new free", *l)
+		return p, nil
+	}
+
 	p := b.header.dataWatermark
 	b.header.dataWatermark += pagesNeeded * psize
 
@@ -138,63 +154,34 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	return p, nil
 }
 
-func (b *BufferAllocator) Deallocate(offset uint64) error {
-	/*
-		size := b.getPreample(offset).size
-		offset -= allocPreableSize
+func (b *BufferAllocator) Deallocate(offset, size uint64) error {
+	// Ensure alignement
+	size = alignSize(size)
+	psize := uint64(b.header.pageSize)
 
-		//fmt.Printf("- Deallocate %d bytes at %d\n", size, offset)
-		if offset >= uint64(b.header.bufferStart) && offset < b.header.firstFreeChunk {
-			nc := b.getChunk(offset)
-			nc.prevFree = 0
-			nc.nextFree = b.header.firstFreeChunk
-			nc.size = size
+	if offset%psize != 0 {
+		return fmt.Errorf("Free of non page aligned address %d (%d)", offset, offset%psize)
+	}
 
-			chunkNext := b.getChunk(b.header.firstFreeChunk)
-			chunkNext.prevFree = offset
+	pagesNeeded := (size + psize - 1) / psize
 
-			b.header.firstFreeChunk = offset
+	b.header.TotalUsed -= uint64(size)
 
-			b.header.TotalUsed -= size
-			return nil
-		}
+	if offset+size == b.header.dataWatermark {
+		println("yes")
+		b.header.dataWatermark -= size
+		return nil
+	}
 
-		chunkPrePos := b.header.firstFreeChunk
-		var chunkPre *chunk
-		for chunkPrePos != 0 {
-			chunkPre = b.getChunk(chunkPrePos)
-			if rangeContains(chunkPrePos, chunkPre.size, offset) {
-				return fmt.Errorf("Memory segmentation error %d already free in (%d,%d)", offset, chunkPrePos, chunkPre.size)
-			}
+	for p := offset; p < offset+pagesNeeded*psize; p += psize {
+		l := (*uint64)(b.GetPtr(p))
+		*l = b.header.freePage
+		b.header.freePage = p
+		println("freeing page", *l, "new free", b.header.freePage)
+	}
 
-			if offset >= chunkPrePos+chunkPre.size && offset < chunkPre.nextFree {
-				break
-			}
+	println("done")
 
-			chunkPrePos = chunkPre.nextFree
-		}
-
-		// Attached next to previous
-		if chunkPrePos+chunkPre.size == offset {
-			chunkPre.size += size
-			b.header.TotalUsed -= size
-			return nil
-		}
-
-		newFree := offset
-		nc := b.getChunk(newFree)
-		nc.prevFree = chunkPrePos
-		nc.nextFree = chunkPre.nextFree
-		nc.size = size
-
-		if chunkPre.nextFree != 0 {
-			chunkNext := b.getChunk(chunkPre.nextFree)
-			chunkNext.prevFree = newFree
-		}
-		chunkPre.nextFree = newFree
-
-		b.header.TotalUsed -= size
-	*/
 	return nil
 }
 

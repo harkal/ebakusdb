@@ -123,12 +123,12 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 		return nil, fmt.Errorf("Unsupported EbakusDB file version")
 	}
 
-	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize))
+	psize := uint16(unsafe.Sizeof(Node{}))
+	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize), psize)
 	if err != nil {
 		return nil, err
 	}
 
-	allocator.SetPageSize(uint16(unsafe.Sizeof(Node{})))
 	//allocator.SetPageSize(4096 / 2)
 
 	db.allocator = allocator

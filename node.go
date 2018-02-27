@@ -41,8 +41,10 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 			ePtr.NodeRelease(mm)
 		}
 
-		mm.Deallocate(uint64(*nPtr))
-		//mm.DeallocateNode(uint64(*nPtr))
+		size := uint64(unsafe.Sizeof(Node{}))
+		if err := mm.Deallocate(uint64(*nPtr), size); err != nil {
+			panic(err)
+		}
 
 		return true
 	}
