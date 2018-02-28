@@ -130,7 +130,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		p := b.header.freePage
 		l := (*uint64)(b.GetPtr(b.header.freePage))
 		b.header.freePage = *l
-		println("allocate page", p, "new free", *l)
+		//println("allocate page", p, "new free", *l)
 		return p, nil
 	}
 
@@ -168,7 +168,7 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 	b.header.TotalUsed -= uint64(size)
 
 	if offset+size == b.header.dataWatermark {
-		println("yes")
+		//println("yes")
 		b.header.dataWatermark -= size
 		return nil
 	}
@@ -177,10 +177,10 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 		l := (*uint64)(b.GetPtr(p))
 		*l = b.header.freePage
 		b.header.freePage = p
-		println("++ Freeing page", b.header.freePage, "link to", *l)
+		//println("++ Freeing page", b.header.freePage, "link to", *l)
 	}
 
-	println("done")
+	//println("done")
 
 	return nil
 }

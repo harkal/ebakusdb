@@ -2,7 +2,6 @@ package ebakusdb
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -20,6 +19,28 @@ type Node struct {
 
 func (n *Node) isLeaf() bool {
 	return !n.keyPtr.isNull()
+}
+
+func (n *Node) hasOneChild() bool {
+	count := 0
+	for _, edgeNode := range n.edges {
+		if !edgeNode.isNull() {
+			count++
+			if count > 1 {
+				return false
+			}
+		}
+	}
+	return count == 1
+}
+
+func (n *Node) getFirstChild() Ptr {
+	for _, edgeNodePtr := range n.edges {
+		if !edgeNodePtr.isNull() {
+			return edgeNodePtr
+		}
+	}
+	return 0
 }
 
 func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
@@ -137,7 +158,7 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 		if edgeNode.isNull() {
 			continue
 		}
-		fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
+		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
 	}
 
@@ -254,6 +275,102 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	return ncPtr, nil, false
 }
 
+func (t *Txn) mergeChild(n *Node) {
+	mm := t.db.allocator
+
+	childPtr := n.getFirstChild()
+	child := childPtr.getNode(mm)
+
+	// Merge the nodes.
+	mergedPrefix := concat(n.prefixPtr.getBytes(mm), child.prefixPtr.getBytes(mm))
+	n.prefixPtr.Release(mm)
+	n.prefixPtr = *newBytesFromSlice(mm, mergedPrefix)
+	n.keyPtr.Release(mm) // check if needed
+	n.valPtr.Release(mm) // check if needed
+	n.keyPtr = child.keyPtr
+	n.keyPtr.Retain(mm)
+	n.valPtr = child.valPtr
+	n.valPtr.Retain(mm)
+
+	n.edges = child.edges
+
+	for _, edgeNode := range n.edges {
+		if edgeNode.isNull() {
+			continue
+		}
+		edgeNode.getNode(mm).Retain()
+	}
+
+	childPtr.NodeRelease(mm)
+}
+
+func (t *Txn) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
+	mm := t.db.allocator
+	n := nPtr.getNode(mm)
+
+	// Check for key exhaustion
+	if len(search) == 0 {
+		if !n.isLeaf() {
+			return nil
+		}
+
+		// Remove the leaf node
+		ncPtr := t.writeNode(nPtr)
+		nc := ncPtr.getNode(mm)
+		nc.keyPtr.Release(mm)
+		nc.valPtr.Release(mm)
+
+		// Check if this node should be merged
+		if *nPtr != t.root && nc.hasOneChild() {
+			t.mergeChild(nc)
+		}
+
+		return ncPtr
+	}
+
+	edgeLabel := search[0]
+	childPtr := n.edges[edgeLabel]
+	if childPtr.isNull() {
+		return nil
+	}
+
+	child := childPtr.getNode(mm)
+	childPrefix := child.prefixPtr.getBytes(mm)
+
+	if !bytes.HasPrefix(search, childPrefix) {
+		return nil
+	}
+
+	// Consume the search prefix
+	search = search[len(childPrefix):]
+	newChildPtr := t.delete(nPtr, &childPtr, search)
+	if newChildPtr == nil {
+		return nil
+	}
+
+	newChild := newChildPtr.getNode(mm)
+
+	// Copy this node. WATCH OUT - it's safe to pass "false" here because we
+	// will only ADD a leaf via nc.mergeChild() if there isn't one due to
+	// the !nc.isLeaf() check in the logic just below. This is pretty subtle,
+	// so be careful if you change any of the logic here.
+	ncPtr := t.writeNode(nPtr)
+	nc := ncPtr.getNode(mm)
+
+	// Delete the edge if the node has no edges
+	nc.edges[edgeLabel].NodeRelease(mm)
+	if newChild.isLeaf() == false && newChild.getFirstChild() == 0 {
+		nc.edges[edgeLabel] = 0
+		if *nPtr != t.root && nc.hasOneChild() && !nc.isLeaf() {
+			t.mergeChild(nc)
+		}
+	} else {
+		nc.edges[edgeLabel] = *newChildPtr
+	}
+
+	return ncPtr
+}
+
 func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	mm := t.db.allocator
 	k = encodeKey(k)
@@ -273,6 +390,18 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	oVal := oldVal.getBytes(mm)
 
 	return &oVal, didUpdate
+}
+
+func (t *Txn) Delete(k []byte) bool {
+	mm := t.db.allocator
+	k = encodeKey(k)
+	newRoot := t.delete(nil, &t.root, k)
+	if newRoot != nil {
+		t.root.NodeRelease(mm)
+		t.root = *newRoot
+		return true
+	}
+	return false
 }
 
 func (t *Txn) Commit() (uint64, error) {
@@ -307,4 +436,11 @@ func (t *Txn) Get(k []byte) (*[]byte, bool) {
 func (db *DB) Commit(txn *Txn) error {
 	txn.Commit()
 	return nil
+}
+
+func concat(a, b []byte) []byte {
+	c := make([]byte, len(a)+len(b))
+	copy(c, a)
+	copy(c[len(a):], b)
+	return c
 }

@@ -233,6 +233,27 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
+	println("-------------------------------- before delete")
+
+	deleted := t.Delete([]byte("key"))
+	if deleted != true {
+		test.Fatal("Delete failed")
+	}
+
+	println("-------------------------------- before delete")
+
+	deleted = t.Delete([]byte("harry"))
+	if deleted != true {
+		test.Fatal("Delete failed")
+	}
+
+	println("-------------------------------- before delete")
+
+	deleted = t.Delete([]byte("bobby"))
+	if deleted != true {
+		test.Fatal("Delete failed")
+	}
+
 	println("-------------------------------- before commit")
 
 	err = db.Commit(t)

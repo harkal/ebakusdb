@@ -73,4 +73,7 @@ func (b *ByteArray) Release(mm balloc.MemoryManager) {
 			panic(err)
 		}
 	}
+
+	b.Offset = 0
+	b.Size = 0
 }
