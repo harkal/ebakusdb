@@ -167,7 +167,7 @@ func Test_SnapshotTnx(test *testing.T) {
 	}
 }
 
-func Test_Get(test *testing.T) {
+func Test_Get2(test *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
@@ -188,11 +188,20 @@ func Test_Get(test *testing.T) {
 		test.Fatal("incorrect refcount")
 	}
 
+	println("-------------------------------- before insert")
+
 	_, update := t.Insert([]byte("key"), []byte("value the big universe dude"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
 
+	println("-------------------------------- before commit")
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
 	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
@@ -200,6 +209,31 @@ func Test_Get(test *testing.T) {
 	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
+
+	println("--------------------------------")
+
+	t = db.Txn()
+	_, update = t.Insert([]byte("harry"), []byte("NEW VALUE"))
+	if update == true {
+		test.Fatal("Insert failed")
+	}
+
+	println("-------------------------------- before commit")
+
+	err = db.Commit(t)
+	if err != nil {
+		test.Fatal("Commit failed")
+	}
+
+	println("--------------------------------")
+
+	t = db.Txn()
+	_, update = t.Insert([]byte("bobby"), []byte("NEW"))
+	if update == true {
+		test.Fatal("Insert failed")
+	}
+
+	println("-------------------------------- before commit")
 
 	err = db.Commit(t)
 	if err != nil {
@@ -210,7 +244,9 @@ func Test_Get(test *testing.T) {
 			test.Fatal("Get failed")
 		}
 	*/
-	db.header.root.NodeRelease(mm)
+	//db.header.root.NodeRelease(mm)
+
+	println("-------------------------------- FINISH")
 
 	fmt.Printf("%d %d (%d)\n", free, db.allocator.GetFree(), int(free)-int(db.allocator.GetFree()))
 

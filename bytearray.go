@@ -23,6 +23,7 @@ func newBytesFromSlice(mm balloc.MemoryManager, data []byte) *ByteArray {
 		panic(err)
 	}
 	copy(a, data)
+
 	return aPtr
 }
 
@@ -40,6 +41,7 @@ func (bPtr *ByteArray) cloneBytes(mm balloc.MemoryManager) (*ByteArray, error) {
 }
 
 func (b *ByteArray) getBytes(mm balloc.MemoryManager) []byte {
+	//println("getBytes", b.Offset, "of count", *b.getBytesRefCount(mm), "value:", string((*[0x7fffff]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]))
 	return (*[0x7fffff]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
 }
 
@@ -51,6 +53,10 @@ func (b *ByteArray) Retain(mm balloc.MemoryManager) {
 	if b.Offset == 0 {
 		return
 	}
+	//println("Retain", b.Offset, "of count", *b.getBytesRefCount(mm), string(b.getBytes(mm)))
+	if *b.getBytesRefCount(mm) == 0 {
+		panic("inc zero refs")
+	}
 	*b.getBytesRefCount(mm)++
 }
 
@@ -59,7 +65,9 @@ func (b *ByteArray) Release(mm balloc.MemoryManager) {
 		return
 	}
 	count := b.getBytesRefCount(mm)
+	//println("Release", b.Offset, "of count", *count, string(b.getBytes(mm)))
 	*count--
+
 	if *count == 0 {
 		if err := mm.Deallocate(b.Offset, uint64(b.Size)+uint64(unsafe.Sizeof(int(0)))); err != nil {
 			panic(err)

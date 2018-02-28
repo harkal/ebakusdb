@@ -1,6 +1,7 @@
 package ebakusdb
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
@@ -16,6 +17,9 @@ func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	n := p.getNode(mm)
 	n.refCount = 1
 	//*n = Node{RefCountedObject: RefCountedObject{refCount: 1}}
+
+	println("**NODE** Allocate", offset, size)
+
 	return &p, n, nil
 }
 
@@ -30,7 +34,7 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 	n := nPtr.getNode(mm)
 	n.refCount--
 
-	//fmt.Printf("Deref node with refs: %d\n", n.refCount)
+	fmt.Printf("Deref node %d with refs: %d\n", *nPtr, n.refCount)
 
 	if n.refCount <= 0 {
 		n.prefixPtr.Release(mm)
@@ -42,6 +46,7 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 		}
 
 		size := uint64(unsafe.Sizeof(Node{}))
+		println("**NODE**")
 		if err := mm.Deallocate(uint64(*nPtr), size); err != nil {
 			panic(err)
 		}

@@ -177,7 +177,7 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 		l := (*uint64)(b.GetPtr(p))
 		*l = b.header.freePage
 		b.header.freePage = p
-		println("freeing page", *l, "new free", b.header.freePage)
+		println("++ Freeing page", b.header.freePage, "link to", *l)
 	}
 
 	println("done")

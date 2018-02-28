@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -136,6 +137,7 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 		if edgeNode.isNull() {
 			continue
 		}
+		fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
 	}
 
@@ -185,7 +187,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 		nc := t.writeNode(nodePtr)
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
-		nnPtr.getNode(mm).Retain()
+		//nnPtr.getNode(mm).Retain()
 		return nc, nil, false
 	}
 
