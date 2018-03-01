@@ -6,6 +6,8 @@ import (
 	"github.com/harkal/ebakusdb/balloc"
 )
 
+var bytesCount int
+
 func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) {
 	offset, err := mm.Allocate(uint64(unsafe.Sizeof(int(0))+uintptr(size)), false)
 	if err != nil {
@@ -14,6 +16,8 @@ func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) 
 	aPtr := &ByteArray{Offset: offset, Size: size}
 	*aPtr.getBytesRefCount(mm) = 1
 	a := aPtr.getBytes(mm)
+	//bytesCount++
+	//println("ByteArray alloc", bytesCount)
 	return aPtr, a, nil
 }
 
@@ -72,6 +76,8 @@ func (b *ByteArray) Release(mm balloc.MemoryManager) {
 		if err := mm.Deallocate(b.Offset, uint64(b.Size)+uint64(unsafe.Sizeof(int(0)))); err != nil {
 			panic(err)
 		}
+		//bytesCount--
+		//println("ByteArray release", bytesCount)
 	}
 
 	b.Offset = 0

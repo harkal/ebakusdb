@@ -298,6 +298,7 @@ func (t *Txn) mergeChild(n *Node) {
 		if edgeNode.isNull() {
 			continue
 		}
+		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
 	}
 
@@ -364,6 +365,7 @@ func (t *Txn) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 		if *nPtr != t.root && nc.hasOneChild() && !nc.isLeaf() {
 			t.mergeChild(nc)
 		}
+		newChildPtr.NodeRelease(mm)
 	} else {
 		nc.edges[edgeLabel] = *newChildPtr
 	}

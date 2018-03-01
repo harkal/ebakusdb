@@ -195,6 +195,15 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
+	var deleted bool
+	/*
+		println("-------------------------------- before delete")
+
+		deleted := t.Delete([]byte("key"))
+		if deleted != true {
+			test.Fatal("Delete failed")
+		}*/
+
 	println("-------------------------------- before commit")
 
 	err = db.Commit(t)
@@ -235,7 +244,7 @@ func Test_Get2(test *testing.T) {
 
 	println("-------------------------------- before delete")
 
-	deleted := t.Delete([]byte("key"))
+	deleted = t.Delete([]byte("key"))
 	if deleted != true {
 		test.Fatal("Delete failed")
 	}
@@ -617,8 +626,7 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 
 	free = db.allocator.GetFree()
 	bPtr.Release(mm)
-	bPtr.Release(mm)
-	if db.allocator.GetFree() <= free {
+	if db.allocator.GetFree() != free {
 		t.Fatal("Failed to release")
 	}
 }
