@@ -276,6 +276,23 @@ func decodeKey(key []byte) []byte {
 	return ret
 }
 
+func safeStringFromEncoded(key []byte) string {
+	if len(key)&1 == 1 {
+		key = append(key, 0)
+	}
+	ret := make([]byte, len(key)/2)
+
+	j := 0
+	for i := 0; i < len(key)/2; i++ {
+		k := key[j]
+		j++
+		k |= key[j] << 4
+		j++
+		ret[i] = k
+	}
+	return string(ret)
+}
+
 // Txn starts a new transaction that can be used to mutate the tree
 func (db *DB) Txn() *Txn {
 	txn := &Txn{
