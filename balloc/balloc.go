@@ -131,6 +131,12 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		l := (*uint64)(b.GetPtr(b.header.freePage))
 		b.header.freePage = *l
 		//println("allocate page", p, "new free", *l)
+		if zero {
+			buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
+			for i := range buf {
+				buf[i] = 0
+			}
+		}
 		return p, nil
 	}
 
