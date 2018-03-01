@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/harkal/ebakusdb/balloc"
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -109,6 +110,25 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 
 func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
 	return &Iterator{node: n, mm: mm}
+}
+
+func (n *Node) printTree(mm balloc.MemoryManager, ident int) {
+	fmt.Printf("%*s", ident, "")
+	fmt.Printf("Prefix: (%s) ", string(n.prefixPtr.getBytes(mm)))
+	if n.isLeaf() {
+		fmt.Printf("%*s", ident, "")
+		fmt.Printf("Key: (%s) Value: (%s) ", string(decodeKey(n.keyPtr.getBytes(mm))), string(n.valPtr.getBytes(mm)))
+	}
+	fmt.Printf("Refs: %d\n", n.refCount)
+	for label, edgeNodePtr := range n.edges {
+		if edgeNodePtr.isNull() {
+			continue
+		}
+		fmt.Printf("%*s", ident+4, "")
+		fmt.Printf("Edge %d (%d):\n", label, edgeNodePtr)
+		edgeNode := edgeNodePtr.getNode(mm)
+		edgeNode.printTree(mm, ident+8)
+	}
 }
 
 const defaultWritableCache = 8192
