@@ -114,7 +114,7 @@ func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
 
 func (n *Node) printTree(mm balloc.MemoryManager, ident int) {
 	fmt.Printf("%*s", ident, "")
-	fmt.Printf("Prefix: (%s) ", string(n.prefixPtr.getBytes(mm)))
+	fmt.Printf("Prefix: (%s) ", safeStringFromEncoded(n.prefixPtr.getBytes(mm)))
 	if n.isLeaf() {
 		fmt.Printf("%*s", ident, "")
 		fmt.Printf("Key: (%s) Value: (%s) ", string(decodeKey(n.keyPtr.getBytes(mm))), string(n.valPtr.getBytes(mm)))
@@ -243,6 +243,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		if newChildPtr != nil {
 			ncPtr := t.writeNode(nodePtr)
 			nc := ncPtr.getNode(mm)
+			nc.edges[edgeLabel].NodeRelease(mm)
 			nc.edges[edgeLabel] = *newChildPtr
 			return ncPtr, oldVal, didUpdate
 		}
@@ -260,8 +261,8 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
-	//nc.edges[search[0]].NodeRelease(mm)
-	nc.edges[search[0]] = *splitNodePtr
+	nc.edges[edgeLabel].NodeRelease(mm)
+	nc.edges[edgeLabel] = *splitNodePtr
 
 	// Restore the existing child node
 	modChildPtr := t.writeNode(&childPtr)
