@@ -126,32 +126,23 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	pagesNeeded := (size + psize - 1) / psize
 
+	var p uint64
 	if b.header.freePage != 0 && pagesNeeded == 1 {
-		p := b.header.freePage
+		p = b.header.freePage
 		l := (*uint64)(b.GetPtr(b.header.freePage))
 		b.header.freePage = *l
 		//println("allocate page", p, "new free", *l)
-		if zero {
-			buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
-			for i := range buf {
-				buf[i] = 0
-			}
-		}
-		return p, nil
+	} else {
+		p = b.header.dataWatermark
+		b.header.dataWatermark += pagesNeeded * psize
 	}
 
-	p := b.header.dataWatermark
-	b.header.dataWatermark += pagesNeeded * psize
-
 	if zero {
-		buf := (*[maxBufferSize]uint64)(b.GetPtr(p))[:size]
+		buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
 		for i := range buf {
 			buf[i] = 0
 		}
 	}
-
-	//	buf := (*[maxBufferSize]uint64)(b.GetPtr(b.header.firstFreeData))
-	//	dummy = buf[4096]
 
 	b.header.TotalUsed += pagesNeeded * psize
 
