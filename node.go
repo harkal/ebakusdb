@@ -8,6 +8,10 @@ import (
 
 var nodeCount int
 
+func GetNodeCount() int {
+	return nodeCount
+}
+
 func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	size := uint64(unsafe.Sizeof(Node{}))
 	offset, err := mm.Allocate(size, true)
@@ -19,7 +23,7 @@ func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	n.refCount = 1
 	//*n = Node{RefCountedObject: RefCountedObject{refCount: 1}}
 
-	//nodeCount++
+	nodeCount++
 	//println("**NODE** Allocate", offset, size, nodeCount)
 
 	return &p, n, nil
@@ -48,8 +52,8 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 		}
 
 		size := uint64(unsafe.Sizeof(Node{}))
-		//nodeCount--
-		//println("**NODE** Release", nodeCount)
+		nodeCount--
+		//println("**NODE** Release", *nPtr, nodeCount)
 		if err := mm.Deallocate(uint64(*nPtr), size); err != nil {
 			panic(err)
 		}
