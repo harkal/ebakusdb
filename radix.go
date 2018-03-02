@@ -372,14 +372,9 @@ func (t *Txn) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 
 	newChild := newChildPtr.getNode(mm)
 
-	// Copy this node. WATCH OUT - it's safe to pass "false" here because we
-	// will only ADD a leaf via nc.mergeChild() if there isn't one due to
-	// the !nc.isLeaf() check in the logic just below. This is pretty subtle,
-	// so be careful if you change any of the logic here.
 	ncPtr := t.writeNode(nPtr)
 	nc := ncPtr.getNode(mm)
 
-	// Delete the edge if the node has no edges
 	nc.edges[edgeLabel].NodeRelease(mm)
 	if newChild.isLeaf() == false && newChild.getFirstChild() == 0 {
 		nc.edges[edgeLabel] = 0
