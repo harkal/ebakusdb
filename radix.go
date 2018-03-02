@@ -261,15 +261,15 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 	splitNode.prefixPtr = *newBytesFromSlice(mm, search[:commonPrefix])
 
-	nc.edges[edgeLabel].NodeRelease(mm)
-	nc.edges[edgeLabel] = *splitNodePtr
-
 	// Restore the existing child node
 	modChildPtr := t.writeNode(&childPtr)
 	modChild := modChildPtr.getNode(mm)
 	pref := modChild.prefixPtr.getBytes(mm)
 
 	splitNode.edges[pref[commonPrefix]] = *modChildPtr
+
+	nc.edges[edgeLabel].NodeRelease(mm)
+	nc.edges[edgeLabel] = *splitNodePtr
 
 	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
 
@@ -448,6 +448,14 @@ func (t *Txn) Rollback() {
 
 func (t *Txn) Root() *Ptr {
 	return &t.root
+}
+
+func (t *Txn) RootNode() *Node {
+	return t.Root().getNode(t.db.allocator)
+}
+
+func (t *Txn) printTree() {
+	t.RootNode().printTree(t.db.allocator, 0)
 }
 
 // Get returns the key
