@@ -331,23 +331,43 @@ func Test_InsertGet(t *testing.T) {
 		db.Commit(txn)
 	}
 
-	data := make(map[string][]byte)
+	del := func(key string) {
+		txn := db.Txn()
+		deleted := txn.Delete([]byte(key))
+		if deleted != true {
+			t.Fatal("Delete failed")
+		}
+		db.Commit(txn)
+	}
 
-	for i := 0; i < 100000; i++ {
+	rand.Seed(0)
+
+	keys := make([]string, 0)
+	values := make([][]byte, 0)
+
+	for i := 0; i < 1000000; i++ {
 		k := RandStringBytesMaskImprSrc(64)
 		v := []byte(RandStringBytesMaskImprSrc(120))
-		data[k] = v
+		keys = append(keys, k)
+		values = append(values, v)
 	}
 
-	for k, v := range data {
-		ins(k, v)
+	for i, k := range keys {
+		ins(k, values[i])
+		//		println("Insert Nodes:", GetNodeCount(), "------", k)
+		//		println("------ Tree ------ Root at:", db.header.root)
+		//		db.header.root.getNode(db.allocator).printTree(db.allocator, 0)
 	}
 
-	for k, v := range data {
+	println("Nodes:", GetNodeCount())
+
+	for i, k := range keys {
+		v := values[i]
 		dv, found := db.Get([]byte(k))
 		if found == false || string(*dv) != string(v) {
-			t.Fatal("Failed")
+			t.Fatal("Failed", k)
 		}
+
 	}
 
 	db.Close()
@@ -357,13 +377,21 @@ func Test_InsertGet(t *testing.T) {
 		t.Fatal("Failed to reopen db")
 	}
 
-	i := 0
-	for k, v := range data {
+	for i, k := range keys {
+		v := values[i]
 		dv, found := db.Get([]byte(k))
 		if found == false || string(*dv) != string(v) {
-			t.Fatalf("Failed %d\n %s\n %s\n (%v)\n", i, string(*dv), string(v), found)
+			t.Fatalf("Failed %d\n %s\n %s\n (%v)\n", i, dv, string(v), found)
 		}
 		i++
+	}
+
+	for _, k := range keys {
+		del(k)
+	}
+
+	if GetNodeCount() != 1 {
+		t.Fatal("Leaked nodes after delete")
 	}
 
 }
