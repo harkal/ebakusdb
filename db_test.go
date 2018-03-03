@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"os"
 	"testing"
-	"unsafe"
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
@@ -51,8 +50,6 @@ func Test_Tnx(test *testing.T) {
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
-
-	fmt.Println(unsafe.Sizeof([1]byte{}))
 
 	t := db.Txn()
 	old, update := t.Insert([]byte("key"), []byte("value"))
