@@ -192,12 +192,12 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 	n := nodePtr.getNode(mm)
 	// Handle key exhaustion
 	if len(search) == 0 {
-		var oldVal *ByteArray
+		var oldVal ByteArray
 		didUpdate := false
 		if n.isLeaf() {
 			didUpdate = true
 
-			oldVal = &n.valPtr
+			oldVal = n.valPtr
 			oldVal.Retain(mm)
 		}
 
@@ -208,7 +208,7 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 		nc.valPtr = vPtr
 		nc.valPtr.Retain(mm)
 
-		return ncPtr, oldVal, didUpdate
+		return ncPtr, &oldVal, didUpdate
 	}
 
 	edgeLabel := search[0]
