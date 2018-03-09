@@ -139,7 +139,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	if zero {
 		buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
-		for i := range buf {
+		for i := range buf { // Optimized by the compiler to simple memclr
 			buf[i] = 0
 		}
 	}

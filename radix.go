@@ -52,7 +52,9 @@ func (n *Node) Get(db *DB, k []byte) (*[]byte, bool) {
 		if len(search) == 0 {
 			if n.isLeaf() {
 				b := n.valPtr.getBytes(mm)
-				return &b, true
+				ob := make([]byte, len(b))
+				copy(ob, b)
+				return &ob, true
 			}
 			break
 		}
@@ -402,12 +404,14 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 
 	if oldVal == nil {
 		return nil, didUpdate
-
 	}
 
-	oVal := oldVal.getBytes(mm)
+	val := oldVal.getBytes(mm)
+	oVal := make([]byte, len(val))
+	copy(oVal, val)
+	oldVal.Release(mm)
 
-	return &oVal, didUpdate
+	return &val, didUpdate
 }
 
 func (t *Txn) Delete(k []byte) bool {
