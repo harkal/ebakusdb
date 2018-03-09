@@ -1,42 +1,9 @@
 package ebakusdb
 
 import (
-	"encoding/binary"
 	"fmt"
 	"reflect"
 )
-
-type Table struct {
-	Indexes []string
-	Node    Ptr
-}
-
-type IndexField struct {
-	table string
-	field string
-}
-
-func (i *IndexField) getIndexKey() []byte {
-	return []byte(i.table + "." + i.field)
-}
-
-func getTableKey(table string) []byte {
-	return []byte("t_" + table)
-}
-
-func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
-
-	switch v.Kind() {
-	case reflect.Uint64, reflect.Int64:
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, v.Uint())
-		return b, nil
-	case reflect.String:
-		return []byte(v.String()), nil
-	default:
-		return nil, fmt.Errorf("Unindexable field type")
-	}
-}
 
 func (t *Txn) CreateTable(table string) error {
 	nPtr, _, err := newNode(t.db.allocator)

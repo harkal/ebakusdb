@@ -352,8 +352,26 @@ func (db *DB) Snapshot(id uint64) *Snapshot {
 		}
 	}
 
+	ptr := Ptr(id)
+	ptr.getNode(db.allocator).Retain()
+
 	return &Snapshot{
 		db:   db,
-		root: Ptr(id),
+		root: ptr,
 	}
+}
+
+func (db *DB) GetRootSnapshot() *Snapshot {
+	db.header.root.getNode(db.allocator).Retain()
+
+	return &Snapshot{
+		db:   db,
+		root: db.header.root,
+	}
+}
+
+func (db *DB) SetRootSnapshot(s *Snapshot) {
+	db.header.root.NodeRelease(db.allocator)
+	db.header.root = s.root
+	db.header.root.getNode(db.allocator).Retain()
 }

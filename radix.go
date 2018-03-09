@@ -467,10 +467,3 @@ func (db *DB) Commit(txn *Txn) error {
 	txn.Commit()
 	return nil
 }
-
-func concat(a, b []byte) []byte {
-	c := make([]byte, len(a)+len(b))
-	copy(c, a)
-	copy(c[len(a):], b)
-	return c
-}
