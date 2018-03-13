@@ -306,21 +306,23 @@ func Test_InsertGet(t *testing.T) {
 	}
 
 	ins := func(key string, val []byte) {
-		txn := db.Txn()
+		txn := db.GetRootSnapshot()
 		_, update := txn.Insert([]byte(key), []byte(val))
 		if update == true {
 			t.Fatal("Insert failed")
 		}
-		db.Commit(txn)
+		db.SetRootSnapshot(txn)
+		txn.Release()
 	}
 
 	del := func(key string) {
-		txn := db.Txn()
+		txn := db.GetRootSnapshot()
 		deleted := txn.Delete([]byte(key))
 		if deleted != true {
 			t.Fatal("Delete failed")
 		}
-		db.Commit(txn)
+		db.SetRootSnapshot(txn)
+		txn.Release()
 	}
 
 	rand.Seed(0)
@@ -645,7 +647,7 @@ func Test_Iterator(test *testing.T) {
 	}
 	mm := db.allocator
 
-	t := db.Txn()
+	t := db.GetRootSnapshot()
 
 	if db.header.root.getNode(mm).refCount != 2 {
 		test.Fatal("incorrect refcount")
@@ -656,10 +658,8 @@ func Test_Iterator(test *testing.T) {
 	t.Insert([]byte("Anna"), []byte("Easy name"))
 	t.Insert([]byte("Alexiou"), []byte("Girl"))
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	if v, _ := db.Get([]byte("Kalogirou")); string(*v) != "this is a last name" {
 		test.Fatal("Get failed")

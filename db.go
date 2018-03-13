@@ -27,19 +27,6 @@ var DefaultOptions = &Options{
 type DBEncoder func(val interface{}) ([]byte, error)
 type DBDecoder func(b []byte, val interface{}) error
 
-// Reader interface
-type DBReader interface {
-	Get(k []byte) (*[]byte, bool)
-	HasTable(table string) bool
-}
-
-type DBAccess interface {
-	DBReader
-	CreateTable(table string) error
-	CreateIndex(index IndexField) error
-	Txn() *Txn
-}
-
 type DB struct {
 	readOnly bool
 
@@ -293,47 +280,37 @@ func safeStringFromEncoded(key []byte) string {
 	return string(ret)
 }
 
-// Txn starts a new transaction that can be used to mutate the tree
-func (db *DB) Txn() *Txn {
-	txn := &Txn{
-		db:   db,
-		root: db.header.root,
-	}
-	txn.root.getNode(db.allocator).Retain()
-	return txn
-}
-
 func (db *DB) Get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
 	return db.header.root.getNode(db.allocator).Get(db, k)
 }
 
 func (db *DB) CreateTable(table string) error {
-	txn := db.Txn()
-	err := txn.CreateTable(table)
+	snap := db.GetRootSnapshot()
+	err := snap.CreateTable(table)
 	if err != nil {
-		txn.Rollback()
+		snap.Release()
 		return err
 	}
-	_, err = txn.Commit()
-	return err
+	db.SetRootSnapshot(snap)
+	return nil
 }
 
 func (db *DB) CreateIndex(index IndexField) error {
-	txn := db.Txn()
-	err := txn.CreateIndex(index)
+	snap := db.GetRootSnapshot()
+	err := snap.CreateIndex(index)
 	if err != nil {
-		txn.Rollback()
+		snap.Release()
 		return err
 	}
-	_, err = txn.Commit()
-	return err
+	db.SetRootSnapshot(snap)
+	return nil
 }
 
 func (db *DB) HasTable(table string) bool {
-	txn := db.Txn()
-	exists := txn.HasTable(table)
-	txn.Rollback()
+	snap := db.GetRootSnapshot()
+	exists := snap.HasTable(table)
+	snap.Release()
 	return exists
 }
 
