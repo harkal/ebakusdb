@@ -372,6 +372,6 @@ func (db *DB) GetRootSnapshot() *Snapshot {
 
 func (db *DB) SetRootSnapshot(s *Snapshot) {
 	db.header.root.NodeRelease(db.allocator)
-	db.header.root = s.root
+	db.header.root = *s.Root()
 	db.header.root.getNode(db.allocator).Retain()
 }

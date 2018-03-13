@@ -49,21 +49,12 @@ type Snapshot struct {
 }
 
 func (s *Snapshot) Release() {
+	s.writable = nil
 	s.root.NodeRelease(s.db.allocator)
 }
 
 func (s *Snapshot) GetId() uint64 {
 	return uint64(s.root)
-}
-
-func (s *Snapshot) Txn() *Txn {
-	txn := &Txn{
-		db:   s.db,
-		root: s.root,
-		snap: s,
-	}
-	txn.root.getNode(s.db.allocator).Retain()
-	return txn
 }
 
 func (s *Snapshot) Get(k []byte) (*[]byte, bool) {

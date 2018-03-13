@@ -44,14 +44,14 @@ func Test_Open(t *testing.T) {
 	}
 }
 
-func Test_Tnx(test *testing.T) {
+func Test_Snap(test *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		test.Fatal("Failed to open db")
 	}
 
-	t := db.Txn()
+	t := db.GetRootSnapshot()
 	old, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed value already there")
@@ -72,10 +72,8 @@ func Test_Tnx(test *testing.T) {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	if v, _ := db.Get([]byte("key")); string(*v) != "va" {
 		test.Fatalf("Get failed (got %s)", v)
@@ -85,7 +83,7 @@ func Test_Tnx(test *testing.T) {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
-	t = db.Txn()
+	t = db.GetRootSnapshot()
 	old, update = t.Insert([]byte("harry"), []byte("Kal"))
 	if update == false {
 		test.Fatal("Insert failed")
@@ -96,10 +94,8 @@ func Test_Tnx(test *testing.T) {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	// Change should not be visible outside the transaction
 	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
@@ -114,7 +110,7 @@ func Test_SnapshotTnx(test *testing.T) {
 		test.Fatal("Failed to open db")
 	}
 
-	t := db.Txn()
+	t := db.GetRootSnapshot()
 	_, update := t.Insert([]byte("key"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed value already there")
@@ -125,29 +121,25 @@ func Test_SnapshotTnx(test *testing.T) {
 		test.Fatal("Update failed")
 	}
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
-	snapshot := db.Snapshot(0)
+	snapshot := db.GetRootSnapshot()
 
-	t = db.Txn()
+	t = db.GetRootSnapshot()
 	_, update = t.Insert([]byte("harry"), []byte("Kal"))
 	if update == false {
 		test.Fatal("Insert failed")
 	}
 
-	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
+	if v, _ := db.Get([]byte("harry")); v == nil || string(*v) != "kalogirou" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
-	tnx := snapshot.Txn()
+	tnx := snapshot
 
 	if v, _ := tnx.Get([]byte("key")); string(*v) != "value" {
 		test.Fatalf("Get failed (got '%s')", string(*v))
@@ -162,6 +154,8 @@ func Test_SnapshotTnx(test *testing.T) {
 	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
 		test.Fatalf("Get failed (got %s)", v)
 	}
+
+	tnx.Release()
 }
 
 func Test_Get2(test *testing.T) {
@@ -179,7 +173,7 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("incorrect refcount")
 	}
 
-	t := db.Txn()
+	t := db.GetRootSnapshot()
 
 	if db.header.root.getNode(mm).refCount != 2 {
 		test.Fatal("incorrect refcount")
@@ -203,10 +197,8 @@ func Test_Get2(test *testing.T) {
 
 	println("-------------------------------- before commit")
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
@@ -218,7 +210,7 @@ func Test_Get2(test *testing.T) {
 
 	println("--------------------------------")
 
-	t = db.Txn()
+	t = db.GetRootSnapshot()
 	_, update = t.Insert([]byte("harry"), []byte("NEW VALUE"))
 	if update == true {
 		test.Fatal("Insert failed")
@@ -226,14 +218,12 @@ func Test_Get2(test *testing.T) {
 
 	println("-------------------------------- before commit")
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	println("--------------------------------")
 
-	t = db.Txn()
+	t = db.GetRootSnapshot()
 	_, update = t.Insert([]byte("bobby"), []byte("NEW"))
 	if update == true {
 		test.Fatal("Insert failed")
@@ -262,10 +252,8 @@ func Test_Get2(test *testing.T) {
 
 	println("-------------------------------- before commit")
 
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	/*	if v, _ := db.Get([]byte("key")); string(*v) != "value" {
 			test.Fatal("Get failed")
@@ -287,7 +275,7 @@ func Test_Get_KeySubset(test *testing.T) {
 		test.Fatal("Failed to open db")
 	}
 
-	t := db.Txn()
+	t := db.GetRootSnapshot()
 	_, update := t.Insert([]byte("key_long"), []byte("value"))
 	if update == true {
 		test.Fatal("Insert failed")
@@ -296,10 +284,8 @@ func Test_Get_KeySubset(test *testing.T) {
 	if update == true {
 		test.Fatal("Insert failed")
 	}
-	err = db.Commit(t)
-	if err != nil {
-		test.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(t)
+	t.Release()
 
 	if v, _ := db.Get([]byte("key_long")); string(*v) != "value" {
 		test.Fatal("Get failed")
@@ -401,7 +387,7 @@ func Test_Tables(t *testing.T) {
 		Phone string
 	}
 
-	txn := db.Txn()
+	txn := db.GetRootSnapshot()
 	txn.CreateTable("PhoneBook")
 	txn.CreateIndex(IndexField{
 		table: "PhoneBook",
@@ -450,16 +436,14 @@ func Test_Tables(t *testing.T) {
 		t.Fatal("Get failed")
 	}
 
-	_, err = txn.Commit()
-	if err != nil {
-		t.Fatal("Commit failed")
-	}
+	db.SetRootSnapshot(txn)
+	txn.Release()
 
 	if _, f := db.Get([]byte("t_PhoneBook")); f != true {
 		t.Fatal("Get failed")
 	}
 
-	txn = db.Txn()
+	txn = db.GetRootSnapshot()
 	iter, err := txn.Select("PhoneBook")
 	if err != nil {
 		t.Fatal("Failed to create iterator")
@@ -513,6 +497,8 @@ func Test_Tables(t *testing.T) {
 	if p2.Id != 1 {
 		t.Fatal("Returned wrong row")
 	}
+
+	txn.Release()
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
