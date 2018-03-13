@@ -378,6 +378,9 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 	mm := s.db.allocator
+
+	s.db.Grow()
+
 	k = encodeKey(k)
 	vPtr := *newBytesFromSlice(mm, v)
 	newRoot, oldVal, didUpdate := s.insert(&s.root, k, k, vPtr)
