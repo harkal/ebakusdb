@@ -558,29 +558,6 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}, nil
 }
 
-/*
-func (s *Snapshot) Commit() (uint64, error) {
-	s.writable = nil
-	s.db.Grow()
-	if s.snap != nil {
-		s.snap.root.NodeRelease(t.db.allocator)
-		t.snap.root = *t.Root()
-	} else {
-		h := t.db.header
-		h.root.NodeRelease(t.db.allocator)
-		h.root = *t.Root()
-	}
-	return uint64(*t.Root()), nil
-}
-*/
-
-/*
-func (s *Snapshot) Rollback() {
-	t.writable = nil
-	t.root.NodeRelease(t.db.allocator)
-}
-*/
-
 func (s *Snapshot) Root() *Ptr {
 	return &s.root
 }
