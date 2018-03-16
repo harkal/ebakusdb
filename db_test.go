@@ -1,6 +1,7 @@
 package ebakusdb
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -340,6 +341,34 @@ func Test_InsertGet(t *testing.T) {
 	for _, k := range keys {
 		del(k)
 	}
+}
+
+func Test_LargeValue(t *testing.T) {
+	fname := tempfile()
+	db, err := Open(fname, 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db")
+	}
+
+	s := db.GetRootSnapshot()
+
+	key := []byte("key")
+	value := make([]byte, 1024)
+	value[0] = 30
+
+	s.Insert(key, value)
+
+	v, f := s.Get(key)
+	if f != true {
+		t.Fatalf("Failed to find key")
+	}
+
+	if !bytes.Equal(*v, value) {
+		t.Fatalf("Failed to get proper value")
+	}
+
+	s.Release()
 }
 
 func Test_Tables(t *testing.T) {
