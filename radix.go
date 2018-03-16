@@ -111,7 +111,7 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 }
 
 func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
-	return &Iterator{node: n, mm: mm}
+	return &Iterator{rootNode: n, node: n, mm: mm}
 }
 
 func (n *Node) printTree(mm balloc.MemoryManager, ident int) {

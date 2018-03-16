@@ -1,5 +1,9 @@
 package ebakusdb
 
+import (
+	"sync/atomic"
+)
+
 type Ptr uint64
 
 func (p *Ptr) isNull() bool {
@@ -13,11 +17,11 @@ type RefCounted interface {
 }
 
 type RefCountedObject struct {
-	refCount int
+	refCount int32
 }
 
 func (p *RefCountedObject) Retain() {
-	p.refCount++
+	atomic.AddInt32(&p.refCount, 1)
 }
 
 type ByteArray struct {

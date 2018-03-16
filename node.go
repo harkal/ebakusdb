@@ -1,14 +1,15 @@
 package ebakusdb
 
 import (
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
 
-var nodeCount int
+var nodeCount int64
 
-func GetNodeCount() int {
+func GetNodeCount() int64 {
 	return nodeCount
 }
 
@@ -23,7 +24,7 @@ func newNode(mm balloc.MemoryManager) (*Ptr, *Node, error) {
 	n.refCount = 1
 	//*n = Node{RefCountedObject: RefCountedObject{refCount: 1}}
 
-	nodeCount++
+	atomic.AddInt64(&nodeCount, 1)
 	//println("**NODE** Allocate", offset, size, nodeCount)
 
 	return &p, n, nil
@@ -38,11 +39,8 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 		return false
 	}
 	n := nPtr.getNode(mm)
-	n.refCount--
 
-	//fmt.Printf("Deref node %d with refs: %d\n", *nPtr, n.refCount)
-
-	if n.refCount <= 0 {
+	if atomic.AddInt32(&n.refCount, -1) <= 0 {
 		n.prefixPtr.Release(mm)
 		n.keyPtr.Release(mm)
 		n.valPtr.Release(mm)

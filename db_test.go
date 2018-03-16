@@ -179,23 +179,12 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("incorrect refcount")
 	}
 
-	println("-------------------------------- before insert")
-
 	_, update := t.Insert([]byte("key"), []byte("value the big universe dude"))
 	if update == true {
 		test.Fatal("Insert failed")
 	}
 
 	var deleted bool
-	/*
-		println("-------------------------------- before delete")
-
-		deleted := t.Delete([]byte("key"))
-		if deleted != true {
-			test.Fatal("Delete failed")
-		}*/
-
-	println("-------------------------------- before commit")
 
 	db.SetRootSnapshot(t)
 	t.Release()
@@ -207,8 +196,6 @@ func Test_Get2(test *testing.T) {
 	if db.header.root.getNode(mm).refCount != 1 {
 		test.Fatal("incorrect refcount")
 	}
-
-	println("--------------------------------")
 
 	t = db.GetRootSnapshot()
 	_, update = t.Insert([]byte("harry"), []byte("NEW VALUE"))
@@ -216,12 +203,8 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
-	println("-------------------------------- before commit")
-
 	db.SetRootSnapshot(t)
 	t.Release()
-
-	println("--------------------------------")
 
 	t = db.GetRootSnapshot()
 	_, update = t.Insert([]byte("bobby"), []byte("NEW"))
@@ -229,42 +212,25 @@ func Test_Get2(test *testing.T) {
 		test.Fatal("Insert failed")
 	}
 
-	println("-------------------------------- before delete")
-
 	deleted = t.Delete([]byte("key"))
 	if deleted != true {
 		test.Fatal("Delete failed")
 	}
-
-	println("-------------------------------- before delete")
 
 	deleted = t.Delete([]byte("harry"))
 	if deleted != true {
 		test.Fatal("Delete failed")
 	}
 
-	println("-------------------------------- before delete")
-
 	deleted = t.Delete([]byte("bobby"))
 	if deleted != true {
 		test.Fatal("Delete failed")
 	}
 
-	println("-------------------------------- before commit")
-
 	db.SetRootSnapshot(t)
 	t.Release()
 
-	/*	if v, _ := db.Get([]byte("key")); string(*v) != "value" {
-			test.Fatal("Get failed")
-		}
-	*/
-	//db.header.root.NodeRelease(mm)
-
-	println("-------------------------------- FINISH")
-
-	fmt.Printf("%d %d (%d)\n", free, db.allocator.GetFree(), int(free)-int(db.allocator.GetFree()))
-
+	//fmt.Printf("%d %d (%d)\n", free, db.allocator.GetFree(), int(free)-int(db.allocator.GetFree()))
 }
 
 func Test_Get_KeySubset(test *testing.T) {
@@ -690,6 +656,9 @@ func Test_Iterator(test *testing.T) {
 	if string(k) != "Harry" || string(v) != "value the big universe dude" {
 		test.Fatal("Get failed")
 	}
+
+	iter = db.Iter()
+	iter.SeekPrefix([]byte("G"))
 }
 
 func tempfile() string {

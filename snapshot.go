@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/hashicorp/golang-lru/simplelru"
 )
@@ -46,6 +47,8 @@ type Snapshot struct {
 	root Ptr
 
 	writable *simplelru.LRU
+
+	writer sync.Mutex
 }
 
 func (s *Snapshot) Release() {
@@ -377,18 +380,24 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 }
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
+	k = encodeKey(k)
 	mm := s.db.allocator
 
-	s.db.Grow()
-
-	k = encodeKey(k)
 	vPtr := *newBytesFromSlice(mm, v)
+
+	s.writer.Lock()
+
 	newRoot, oldVal, didUpdate := s.insert(&s.root, k, k, vPtr)
-	vPtr.Release(mm)
 	if newRoot != nil {
 		s.root.NodeRelease(mm)
 		s.root = *newRoot
 	}
+
+	s.db.Grow()
+
+	s.writer.Unlock()
+
+	vPtr.Release(mm)
 
 	if oldVal == nil {
 		return nil, didUpdate
@@ -403,6 +412,9 @@ func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 }
 
 func (s *Snapshot) Delete(k []byte) bool {
+	s.writer.Lock()
+	defer s.writer.Unlock()
+
 	mm := s.db.allocator
 	k = encodeKey(k)
 	newRoot := s.delete(nil, &s.root, k)

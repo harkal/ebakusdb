@@ -14,15 +14,19 @@ type edge struct {
 type edges []edge
 
 type Iterator struct {
-	node  *Node
-	stack []edges
-	mm    balloc.MemoryManager
+	rootNode *Node
+	node     *Node
+	stack    []edges
+	mm       balloc.MemoryManager
 }
 
 func (i *Iterator) SeekPrefix(prefix []byte) {
 	prefix = encodeKey(prefix)
 	i.stack = nil
 	n := i.node
+	if n == nil {
+		n = i.rootNode
+	}
 	search := prefix
 	for {
 		if len(search) == 0 {

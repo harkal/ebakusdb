@@ -3,6 +3,8 @@ package balloc
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -27,6 +29,8 @@ type BufferAllocator struct {
 	bufferPtr  unsafe.Pointer
 	bufferSize uint64
 	header     *header
+
+	mux sync.Mutex
 }
 
 const magic uint32 = 0xca01af01
@@ -101,7 +105,7 @@ func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, first
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
-	return b.bufferSize - b.header.TotalUsed
+	return b.bufferSize - atomic.LoadUint64(&b.header.TotalUsed)
 }
 
 func (b *BufferAllocator) GetCapacity() uint64 {
@@ -126,6 +130,8 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	pagesNeeded := (size + psize - 1) / psize
 
+	b.mux.Lock()
+
 	var p uint64
 	if b.header.freePage != 0 && pagesNeeded == 1 {
 		p = b.header.freePage
@@ -137,6 +143,8 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		b.header.dataWatermark += pagesNeeded * psize
 	}
 
+	b.mux.Unlock()
+
 	if zero {
 		buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
 		for i := range buf { // Optimized by the compiler to simple memclr
@@ -144,7 +152,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		}
 	}
 
-	b.header.TotalUsed += pagesNeeded * psize
+	atomic.AddUint64(&b.header.TotalUsed, pagesNeeded*psize)
 
 	//fmt.Printf("+ allocate %d bytes at %d\n", size, chunkPos)
 
@@ -162,7 +170,10 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 
 	pagesNeeded := (size + psize - 1) / psize
 
-	b.header.TotalUsed -= uint64(size)
+	atomic.AddUint64(&b.header.TotalUsed, ^uint64(size-1))
+
+	b.mux.Lock()
+	defer b.mux.Unlock()
 
 	if offset+size == b.header.dataWatermark {
 		//println("yes")

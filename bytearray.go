@@ -1,6 +1,7 @@
 package ebakusdb
 
 import (
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
@@ -49,8 +50,8 @@ func (b *ByteArray) getBytes(mm balloc.MemoryManager) []byte {
 	return (*[0x7fffff]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
 }
 
-func (b *ByteArray) getBytesRefCount(mm balloc.MemoryManager) *int {
-	return (*int)(mm.GetPtr(b.Offset))
+func (b *ByteArray) getBytesRefCount(mm balloc.MemoryManager) *int32 {
+	return (*int32)(mm.GetPtr(b.Offset))
 }
 
 func (b *ByteArray) Retain(mm balloc.MemoryManager) {
@@ -61,18 +62,17 @@ func (b *ByteArray) Retain(mm balloc.MemoryManager) {
 	if *b.getBytesRefCount(mm) == 0 {
 		panic("inc zero refs")
 	}
-	*b.getBytesRefCount(mm)++
+	atomic.AddInt32(b.getBytesRefCount(mm), 1)
 }
 
 func (b *ByteArray) Release(mm balloc.MemoryManager) {
 	if b.Offset == 0 {
 		return
 	}
-	count := b.getBytesRefCount(mm)
-	//println("Release", b.Offset, "of count", *count, string(b.getBytes(mm)))
-	*count--
 
-	if *count == 0 {
+	count := b.getBytesRefCount(mm)
+
+	if atomic.AddInt32(count, -1) == 0 {
 		if err := mm.Deallocate(b.Offset, uint64(b.Size)+uint64(unsafe.Sizeof(int(0)))); err != nil {
 			panic(err)
 		}
