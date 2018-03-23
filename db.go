@@ -94,31 +94,32 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 	}
 	db.mmap(int(info.Size()))
 
-	//db.bufferSize = 8 * 1024 * 1024 * 1024
-	//db.bufferRef = make([]byte, db.bufferSize)
-	//db.buffer = (*[0x9000000000]byte)(unsafe.Pointer(&db.bufferRef[0]))
-	//h := (*header)(unsafe.Pointer(&db.bufferRef[0]))
-	//h.magic = magic
-	//h.version = version
-
-	headerSize := unsafe.Sizeof(header{})
-	db.header = (*header)(unsafe.Pointer(&db.bufferRef[0]))
-	if db.header.magic != magic {
-		return nil, fmt.Errorf("Not an EbakusDB file")
-	}
-	if db.header.version != version {
-		return nil, fmt.Errorf("Unsupported EbakusDB file version")
-	}
-
-	psize := uint16(unsafe.Sizeof(Node{}))
-	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize), psize)
-	if err != nil {
+	if err := db.init(); err != nil {
 		return nil, err
 	}
 
-	db.allocator = allocator
+	//fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
 
-	db.init()
+	return db, nil
+}
+
+func OpenInMemory(options *Options) (*DB, error) {
+	if options == nil {
+		options = DefaultOptions
+	}
+
+	db := &DB{
+		readOnly: options.ReadOnly,
+		encode:   json.Marshal,
+		decode:   json.Unmarshal,
+	}
+
+	db.path = "memory_buffer"
+	db.initNewDBMemory()
+
+	if err := db.init(); err != nil {
+		return nil, err
+	}
 
 	//fmt.Printf("Inited EbakusDB with %d MB of storage\n", info.Size()/megaByte)
 
@@ -135,6 +136,23 @@ func (db *DB) GetPath() string {
 }
 
 func (db *DB) init() error {
+	headerSize := unsafe.Sizeof(header{})
+	db.header = (*header)(unsafe.Pointer(&db.bufferRef[0]))
+	if db.header.magic != magic {
+		return fmt.Errorf("Not an EbakusDB file")
+	}
+	if db.header.version != version {
+		return fmt.Errorf("Unsupported EbakusDB file version")
+	}
+
+	psize := uint16(unsafe.Sizeof(Node{}))
+	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize), psize)
+	if err != nil {
+		return err
+	}
+
+	db.allocator = allocator
+
 	if db.header.root.isNull() {
 		root, _, err := newNode(db.allocator)
 		if err != nil {
@@ -145,6 +163,15 @@ func (db *DB) init() error {
 	}
 
 	return nil
+}
+
+func (db *DB) initNewDBMemory() {
+	db.bufferSize = 16 * megaByte
+	db.bufferRef = make([]byte, db.bufferSize)
+	db.buffer = (*[0x9000000000]byte)(unsafe.Pointer(&db.bufferRef[0]))
+	h := (*header)(unsafe.Pointer(&db.bufferRef[0]))
+	h.magic = magic
+	h.version = version
 }
 
 func (db *DB) initNewDBFile() error {
@@ -166,7 +193,8 @@ func (db *DB) initNewDBFile() error {
 	return err
 }
 
-const megaByte = 1024 * 1024
+const kiloByte = 1024
+const megaByte = 1024 * kiloByte
 const gigaByte = 1024 * megaByte
 
 func (db *DB) Grow() error {
