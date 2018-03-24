@@ -212,19 +212,28 @@ func (db *DB) Grow() error {
 
 	//fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
 
-	if err := db.munmap(); err != nil {
-		return fmt.Errorf("Failed to unmap memory error: %s", err)
-	}
+	// Handle in memory case
+	if db.file != nil {
+		if err := db.munmap(); err != nil {
+			return fmt.Errorf("Failed to unmap memory error: %s", err)
+		}
 
-	if err := db.file.Truncate(int64(newSize)); err != nil {
-		return fmt.Errorf("file resize error: %s", err)
-	}
-	if err := db.file.Sync(); err != nil {
-		return fmt.Errorf("file sync error: %s", err)
-	}
+		if err := db.file.Truncate(int64(newSize)); err != nil {
+			return fmt.Errorf("file resize error: %s", err)
+		}
+		if err := db.file.Sync(); err != nil {
+			return fmt.Errorf("file sync error: %s", err)
+		}
 
-	if err := db.mmap(int(newSize)); err != nil {
-		return fmt.Errorf("Failed to map memory error: %s", err)
+		if err := db.mmap(int(newSize)); err != nil {
+			return fmt.Errorf("Failed to map memory error: %s", err)
+		}
+	} else {
+		newBufferRef := make([]byte, newSize)
+		copy(newBufferRef, db.bufferRef)
+		db.bufferRef = newBufferRef
+		db.buffer = (*[0x9000000000]byte)(unsafe.Pointer(&newBufferRef[0]))
+		db.bufferSize = newSize
 	}
 
 	headerSize := unsafe.Sizeof(header{})
