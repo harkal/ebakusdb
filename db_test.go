@@ -387,8 +387,8 @@ func Test_Tables(t *testing.T) {
 	txn := db.GetRootSnapshot()
 	txn.CreateTable("PhoneBook")
 	txn.CreateIndex(IndexField{
-		table: "PhoneBook",
-		field: "Phone",
+		Table: "PhoneBook",
+		Field: "Phone",
 	})
 
 	p1 := Phone{

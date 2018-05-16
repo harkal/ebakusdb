@@ -16,12 +16,12 @@ type Table struct {
 }
 
 type IndexField struct {
-	table string
-	field string
+	Table string
+	Field string
 }
 
 func (i *IndexField) getIndexKey() []byte {
-	return []byte(i.table + "." + i.field)
+	return []byte(i.Table + "." + i.Field)
 }
 
 func getTableKey(table string) []byte {
@@ -82,17 +82,17 @@ func (s *Snapshot) CreateTable(table string) error {
 }
 
 func (s *Snapshot) CreateIndex(index IndexField) error {
-	tPtrMarshaled, found := s.Get(getTableKey(index.table))
+	tPtrMarshaled, found := s.Get(getTableKey(index.Table))
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
 
-	tbl.Indexes = append(tbl.Indexes, index.field)
+	tbl.Indexes = append(tbl.Indexes, index.Field)
 
 	v, _ := s.db.encode(tbl)
-	s.Insert(getTableKey(index.table), v)
+	s.Insert(getTableKey(index.Table), v)
 
 	nPtr, _, err := newNode(s.db.allocator)
 	if err != nil {
@@ -125,6 +125,9 @@ func (s *Snapshot) Snapshot() *Snapshot {
 }
 
 func (s *Snapshot) ResetTo(to *Snapshot) {
+	if s.GetId() == to.GetId() {
+		return
+	}
 	s.Release()
 	s.root = to.root
 	s.root.getNode(s.db.allocator).Retain()
@@ -471,7 +474,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			continue
 		}
 
-		ifield := IndexField{table: table, field: indexField}
+		ifield := IndexField{Table: table, Field: indexField}
 		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
 		if found == false {
 			return fmt.Errorf("Unknown index")
@@ -540,7 +543,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 				iter.SeekPrefix(prefix)
 			}
 		} else {
-			ifield := IndexField{table: table, field: indexField}
+			ifield := IndexField{Table: table, Field: indexField}
 			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
 			if found == false {
 				return nil, fmt.Errorf("Unknown index")
