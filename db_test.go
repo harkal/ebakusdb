@@ -561,8 +561,13 @@ func Test_TableOrdering(t *testing.T) {
 	}
 
 	iter, err = snap.Select(WitnessesTable, "Stake")
+
+	lastStake := uint64(3000)
 	for iter.Prev(&w) {
-		t.Log(w)
+		if w.Stake >= lastStake {
+			t.Fatal("Improper ordering")
+		}
+		lastStake = w.Stake
 	}
 }
 
