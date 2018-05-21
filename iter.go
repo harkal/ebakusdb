@@ -95,6 +95,47 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 	return nil, nil, false
 }
 
+func (i *Iterator) Prev() ([]byte, []byte, bool) {
+	if i.stack == nil && i.node != nil {
+		i.stack = []edges{
+			edges{
+				edge{node: i.node},
+			},
+		}
+	}
+
+	for len(i.stack) > 0 {
+		n := len(i.stack)
+		last := i.stack[n-1]
+		elem := last[0].node
+
+		if len(last) > 1 {
+			i.stack[n-1] = last[1:]
+		} else {
+			i.stack = i.stack[:n-1]
+		}
+
+		es := make(edges, 0)
+		for k, _ := range elem.edges {
+			nPtr := elem.edges[len(elem.edges)-k-1]
+			if !nPtr.isNull() {
+				e := edge{key: byte(k), node: nPtr.getNode(i.mm)}
+				es = append(es, e)
+			}
+		}
+
+		if len(es) > 0 {
+			i.stack = append(i.stack, es)
+		}
+
+		if elem.isLeaf() {
+			return decodeKey(elem.keyPtr.getBytes(i.mm)), elem.valPtr.getBytes(i.mm), true
+		}
+	}
+
+	return nil, nil, false
+}
+
 type ResultIterator struct {
 	db   *DB
 	iter *Iterator
@@ -104,6 +145,25 @@ type ResultIterator struct {
 
 func (ri *ResultIterator) Next(val interface{}) bool {
 	_, value, ok := ri.iter.Next()
+	if !ok {
+		return ok
+	}
+	if ri.tableRoot != nil {
+		pKey := encodeKey(value)
+		value, ok := ri.tableRoot.Get(ri.db, pKey)
+		if !ok {
+			return false
+		}
+		ri.db.decode(*value, val)
+	} else {
+		ri.db.decode(value, val)
+	}
+
+	return ok
+}
+
+func (ri *ResultIterator) Prev(val interface{}) bool {
+	_, value, ok := ri.iter.Prev()
 	if !ok {
 		return ok
 	}

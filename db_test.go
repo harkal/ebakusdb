@@ -538,6 +538,32 @@ func Test_TableOrdering(t *testing.T) {
 	if w.Stake != 1000 {
 		t.Fatal("Returned wrong row")
 	}
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    [4]byte{1, 2, 3, 5},
+		Stake: 2000,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    [4]byte{1, 2, 3, 6},
+		Stake: 100,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    [4]byte{1, 2, 2, 5},
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err = snap.Select(WitnessesTable, "Stake")
+	for iter.Prev(&w) {
+		t.Log(w)
+	}
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
