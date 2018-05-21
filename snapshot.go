@@ -37,6 +37,23 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 		return b, nil
 	case reflect.String:
 		return []byte(v.String()), nil
+	case reflect.Slice:
+		return v.Bytes(), nil
+	case reflect.Array:
+		if v.Len() == 0 {
+			return nil, fmt.Errorf("Empty array unindexable")
+		}
+		r := make([]byte, 0)
+		for i := 0; i < v.Len(); i++ {
+			e := v.Index(i)
+			switch e.Kind() {
+			case reflect.Uint8:
+				r = append(r, byte(e.Uint()))
+			default:
+				return nil, fmt.Errorf("Unindexable field type")
+			}
+		}
+		return r, nil
 	default:
 		return nil, fmt.Errorf("Unindexable field type")
 	}

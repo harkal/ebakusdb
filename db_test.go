@@ -506,7 +506,7 @@ func Test_TableOrdering(t *testing.T) {
 	}
 
 	type Witness struct {
-		Id    [16]byte
+		Id    [4]byte
 		Stake uint64
 	}
 
@@ -521,10 +521,22 @@ func Test_TableOrdering(t *testing.T) {
 	snap := db.GetRootSnapshot()
 
 	if err := snap.InsertObj(WitnessesTable, Witness{
-		Id:    [16]byte{1},
+		Id:    [4]byte{1, 2, 3, 4},
 		Stake: 1000,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := snap.Select(WitnessesTable, "Id", [4]byte{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var w Witness
+
+	iter.Next(&w)
+	if w.Stake != 1000 {
+		t.Fatal("Returned wrong row")
 	}
 }
 
