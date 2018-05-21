@@ -498,6 +498,36 @@ func Test_Tables(t *testing.T) {
 	txn.Release()
 }
 
+func Test_TableOrdering(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    [16]byte
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable)
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    [16]byte{1},
+		Stake: 1000,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+}
+
 func Test_ByteArrayCreation(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
