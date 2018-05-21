@@ -507,6 +507,69 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	return nil
 }
 
+func (s *Snapshot) DeleteObj(table string, id interface{}) error {
+	tPtrMarshaled, found := s.Get(getTableKey(table))
+	if found == false {
+		return fmt.Errorf("Unknown table")
+	}
+	var tbl Table
+	s.db.decode(*tPtrMarshaled, &tbl)
+
+	k, err := getEncodedIndexKey(reflect.ValueOf(id))
+	if err != nil {
+		return err
+	}
+	ek := encodeKey(k)
+
+	mm := s.db.allocator
+
+	newRoot := s.delete(nil, &tbl.Node, ek)
+	if newRoot != nil {
+		tbl.Node.NodeRelease(mm)
+		tbl.Node = *newRoot
+	}
+
+	/*
+		// Do the additional indexes
+		for _, indexField := range tbl.Indexes {
+			if indexField == "Id" {
+				continue
+			}
+
+			ifield := IndexField{Table: table, Field: indexField}
+			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+			if found == false {
+				return fmt.Errorf("Unknown index")
+			}
+			var tPtr Ptr
+			s.db.decode(*tPtrMarshaled, &tPtr)
+
+			fv := v.FieldByName(indexField)
+			if !fv.IsValid() {
+				return fmt.Errorf("Object doesn't have an %s field", indexField)
+			}
+
+			ik, err := getEncodedIndexKey(fv)
+			if err != nil {
+				return err
+			}
+			ik = encodeKey(ik)
+
+			pKeyPtr := *newBytesFromSlice(mm, k)
+			newRoot, _, _ := s.insert(&tPtr, ik, ik, pKeyPtr)
+			pKeyPtr.Release(mm)
+			if newRoot != nil {
+				tPtr.NodeRelease(mm)
+				tPtr = *newRoot
+				tPtrMarshaled, _ := s.db.encode(tPtr)
+				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
+			}
+		}
+	*/
+
+	return nil
+}
+
 func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, error) {
 	tPtrMarshaled, found := s.Get(getTableKey(table))
 	if found == false {
