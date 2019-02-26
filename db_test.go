@@ -70,18 +70,18 @@ func Test_Snap(test *testing.T) {
 	}
 
 	if v, _ := t.Get([]byte("key")); string(*v) != "va" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	db.SetRootSnapshot(t)
 	t.Release()
 
 	if v, _ := db.Get([]byte("key")); string(*v) != "va" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	t = db.GetRootSnapshot()
@@ -92,7 +92,7 @@ func Test_Snap(test *testing.T) {
 
 	// Change should not be visible outside the transaction
 	if v, _ := db.Get([]byte("harry")); string(*v) != "kalogirou" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	db.SetRootSnapshot(t)
@@ -100,7 +100,7 @@ func Test_Snap(test *testing.T) {
 
 	// Change should not be visible outside the transaction
 	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 }
 
@@ -134,7 +134,7 @@ func Test_SnapshotTnx(test *testing.T) {
 	}
 
 	if v, _ := db.Get([]byte("harry")); v == nil || string(*v) != "kalogirou" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	db.SetRootSnapshot(t)
@@ -148,12 +148,12 @@ func Test_SnapshotTnx(test *testing.T) {
 
 	// Change should not be visible on this snapshot
 	if v, _ := tnx.Get([]byte("harry")); string(*v) != "kalogirou" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	// But should be visible here
 	if v, _ := db.Get([]byte("harry")); string(*v) != "Kal" {
-		test.Fatalf("Get failed (got %s)", v)
+		test.Fatalf("Get failed (got %v)", v)
 	}
 
 	tnx.Release()
@@ -333,7 +333,7 @@ func Test_InsertGet(t *testing.T) {
 		v := values[i]
 		dv, found := db.Get([]byte(k))
 		if found == false || string(*dv) != string(v) {
-			t.Fatalf("Failed %d\n %s\n %s\n (%v)\n", i, dv, string(v), found)
+			t.Fatalf("Failed %d\n %v\n %s\n (%v)\n", i, dv, string(v), found)
 		}
 		i++
 	}
