@@ -571,6 +571,65 @@ func Test_TableOrdering(t *testing.T) {
 	}
 }
 
+func Test_TableDuplicates(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    [4]byte
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable)
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    [4]byte{1, 2, 3, 4},
+		Stake: 1000,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := snap.Select(WitnessesTable, "Id", [4]byte{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var w Witness
+
+	iter.Next(&w)
+	if w.Stake != 1000 {
+		t.Fatal("Returned wrong row")
+	}
+
+	// force an update, and test that it doesn't duplicate the entry
+	w.Stake = 1001
+
+	if err := snap.InsertObj(WitnessesTable, w); err != nil {
+		t.Fatal("Failed to update row error:", err)
+	}
+
+	iter, err = snap.Select(WitnessesTable, "Stake")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	iter.Prev(&w)
+	if iter.Prev(&w) == true {
+		t.Fatal("Found second row", &w)
+	}
+}
+
 func Test_ByteArrayCreation(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
