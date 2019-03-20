@@ -480,7 +480,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	objPtr.Release(mm)
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.Insert(getTableKey(table), tblMarshaled)
