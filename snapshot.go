@@ -476,8 +476,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	ek := encodeKey(k)
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
-	newRoot, _, _ := s.insert(&tbl.Node, ek, ek, objPtr)
+	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr)
 	objPtr.Release(mm)
+
 	if newRoot != nil {
 		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
@@ -502,6 +503,33 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
 			return fmt.Errorf("Object doesn't have an %s field", indexField)
+		}
+
+		if oldVal != nil {
+			oldBytes := oldVal.getBytes(mm)
+			t := reflect.TypeOf(obj)
+			oldV := reflect.New(t)
+			s.db.decode(oldBytes, oldV.Interface())
+
+			oldIndexField := oldV.Elem().FieldByName(indexField)
+			if !oldIndexField.IsValid() {
+				return fmt.Errorf("Old object doesn't have an %s field", indexField)
+			}
+
+			oldKey, err := getEncodedIndexKey(oldIndexField)
+			if err != nil {
+				return err
+			}
+			oldKey = encodeKey(oldKey)
+			newRoot := s.delete(nil, &tPtr, oldKey)
+			if newRoot != nil {
+				tPtr.NodeRelease(mm)
+				tPtr = *newRoot
+				tPtrMarshaled, _ := s.db.encode(tPtr)
+				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
+			}
+
+			oldVal.Release(mm)
 		}
 
 		ik, err := getEncodedIndexKey(fv)
