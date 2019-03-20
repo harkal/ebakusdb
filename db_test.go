@@ -612,6 +612,14 @@ func Test_TableDuplicates(t *testing.T) {
 		t.Fatal("Returned wrong row")
 	}
 
+	if iter.Next(&w) != false {
+		t.Fatal("Next row found", &w)
+	}
+
+	if iter.Prev(&w) != false {
+		t.Fatal("Prev row found", &w)
+	}
+
 	// force an update, and test that it doesn't duplicate the entry
 	w.Stake = 1001
 
@@ -624,9 +632,14 @@ func Test_TableDuplicates(t *testing.T) {
 		t.Fatal("Failed to create iterator error:", err)
 	}
 
+	iter.Next(&w)
+	if iter.Next(&w) == true {
+		t.Fatal("Has next", &w)
+	}
+
 	iter.Prev(&w)
 	if iter.Prev(&w) == true {
-		t.Fatal("Found second row", &w)
+		t.Fatal("Has prev", &w)
 	}
 }
 
