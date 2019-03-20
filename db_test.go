@@ -643,6 +643,117 @@ func Test_TableDuplicates(t *testing.T) {
 	}
 }
 
+func Test_SnapshotResetTo(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Phone string
+	}
+
+	txn := db.GetRootSnapshot()
+	// defer txn.Release()
+
+	txn.CreateTable("PhoneBook")
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Phone",
+	})
+
+	p1 := Phone{
+		Id:    0,
+		Name:  "Harry",
+		Phone: "555-3456",
+	}
+
+	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if _, f := db.Get([]byte("t_PhoneBook")); f != false {
+		t.Fatal("Get failed")
+	}
+
+	if _, f := txn.Get([]byte("t_PhoneBook")); f != true {
+		t.Fatal("Get failed")
+	}
+
+	// similar to genesis block
+	db.SetRootSnapshot(txn)
+	txn.Release()
+
+	if _, f := db.Get([]byte("t_PhoneBook")); f != true {
+		t.Fatal("Get failed")
+	}
+
+	// txn2 := txn.Snapshot()
+	txn2 := db.GetRootSnapshot()
+	txn2OrigSnap := txn2.Snapshot()
+	// defer txn2OrigSnap.Release()
+
+	p2 := Phone{
+		Id:    0,
+		Name:  "Harry who?",
+		Phone: "555-3456",
+	}
+
+	if err := txn2.InsertObj("PhoneBook", p2); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := txn2.Select("PhoneBook")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p3 Phone
+	iter.Next(&p3)
+	if p3.Name != "Harry who?" {
+		t.Fatal("Returned wrong row")
+	}
+
+	txn2.ResetTo(txn2OrigSnap)
+	txn2OrigSnap.Release()
+
+	iter, err = txn2.Select("PhoneBook")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p4 Phone
+	iter.Next(&p4)
+	if p4.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+
+	// db.SetRootSnapshot(txn2)
+	txn2.Release()
+
+	// if _, f := db.Get([]byte("t_PhoneBook")); f != true {
+	// 	t.Fatal("Get failed")
+	// }
+
+	// txn3 := db.GetRootSnapshot()
+
+	// iter, err = txn3.Select("PhoneBook")
+	// if err != nil {
+	// 	t.Fatal("Failed to create iterator")
+	// }
+
+	// var p5 Phone
+	// if iter.Next(&p5) == false {
+	// 	t.Fatal("No row found")
+	// }
+	// if p5.Name != "Harry" {
+	// 	t.Fatal("Returned wrong row")
+	// }
+}
+
 func Test_ByteArrayCreation(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
