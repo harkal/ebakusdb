@@ -734,9 +734,75 @@ func Test_SnapshotResetTo(t *testing.T) {
 	// db.SetRootSnapshot(txn2)
 	txn2.Release()
 
-	// if _, f := db.Get([]byte("t_PhoneBook")); f != true {
-	// 	t.Fatal("Get failed")
-	// }
+	if _, f := db.Get([]byte("t_PhoneBook")); f != true {
+		t.Fatal("Get failed")
+	}
+
+	txn3 := db.GetRootSnapshot()
+
+	iter, err = txn3.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p5 Phone
+	if iter.Next(&p5) == false {
+		t.Fatal("No row found")
+	}
+	if p5.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+}
+
+func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Phone string
+	}
+
+	txn := db.GetRootSnapshot()
+
+	txn.CreateTable("PhoneBook")
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Phone",
+	})
+
+	p1 := Phone{
+		Id:    0,
+		Name:  "Harry",
+		Phone: "555-3456",
+	}
+
+	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	snapForResetTo := txn.Snapshot()
+
+	iter, err := txn.Select("PhoneBook")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p2 Phone
+	iter.Next(&p2)
+	if p2.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+
+	p2.Name = "Harry who?"
+
+	if err := txn.InsertObj("PhoneBook", p2); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
 
 	// txn3 := db.GetRootSnapshot()
 
