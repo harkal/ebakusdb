@@ -770,10 +770,10 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	txn := db.GetRootSnapshot()
 
 	txn.CreateTable("PhoneBook")
-	txn.CreateIndex(IndexField{
-		Table: "PhoneBook",
-		Field: "Phone",
-	})
+	// txn.CreateIndex(IndexField{
+	// 	Table: "PhoneBook",
+	// 	Field: "Phone",
+	// })
 
 	p1 := Phone{
 		Id:    0,
@@ -804,10 +804,10 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	txn.ResetTo(snapForResetTo)
-	snapForResetTo.Release()
+	//txn.ResetTo(snapForResetTo)
+	//snapForResetTo.Release()
 
-	iter, err = txn.Select("PhoneBook", "Phone")
+	iter, err = snapForResetTo.Select("PhoneBook")
 	if err != nil {
 		t.Fatal("Failed to create iterator")
 	}
@@ -816,6 +816,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	if iter.Next(&p3) == false {
 		t.Fatal("No row found")
 	}
+	println(p3.Id, " ", p3.Name, " ", p3.Phone)
 	if p3.Name != "Harry" {
 		t.Fatal("Returned wrong row")
 	}
