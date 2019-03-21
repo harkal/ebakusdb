@@ -754,7 +754,7 @@ func Test_SnapshotResetTo(t *testing.T) {
 	}
 }
 
-func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
+func Test_SnapshotResetToSelectNoEntries(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
@@ -770,10 +770,6 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	txn := db.GetRootSnapshot()
 
 	txn.CreateTable("PhoneBook")
-	// txn.CreateIndex(IndexField{
-	// 	Table: "PhoneBook",
-	// 	Field: "Phone",
-	// })
 
 	p1 := Phone{
 		Id:    0,
@@ -804,9 +800,6 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	//txn.ResetTo(snapForResetTo)
-	//snapForResetTo.Release()
-
 	iter, err = snapForResetTo.Select("PhoneBook")
 	if err != nil {
 		t.Fatal("Failed to create iterator")
@@ -822,6 +815,70 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	}
 }
 
+func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Phone string
+	}
+
+	txn := db.GetRootSnapshot()
+
+	txn.CreateTable("PhoneBook")
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Phone",
+	})
+
+	p1 := Phone{
+		Id:    0,
+		Name:  "Harry",
+		Phone: "555-3456",
+	}
+
+	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	snapForResetTo := txn.Snapshot()
+
+	iter, err := txn.Select("PhoneBook")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p2 Phone
+	iter.Next(&p2)
+	if p2.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+
+	p2.Name = "Harry who?"
+
+	if err := txn.InsertObj("PhoneBook", p2); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err = snapForResetTo.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p3 Phone
+	if iter.Next(&p3) == false {
+		t.Fatal("No row found")
+	}
+	println(p3.Id, " ", p3.Name, " ", p3.Phone)
+	if p3.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+}
 func Test_ByteArrayCreation(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
