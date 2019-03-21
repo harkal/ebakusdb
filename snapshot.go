@@ -162,11 +162,11 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 
 	n := nodePtr.getNode(mm)
 
-	if _, ok := s.writable.Get(*nodePtr); ok {
-		//println("hit", t.writable.Len())
-		n.Retain()
-		return nodePtr
-	}
+	// if _, ok := s.writable.Get(*nodePtr); ok {
+	// 	//println("hit", t.writable.Len())
+	// 	n.Retain()
+	// 	return nodePtr
+	// }
 
 	//println("miss", t.writable.Len())
 
