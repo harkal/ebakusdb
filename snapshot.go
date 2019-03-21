@@ -498,6 +498,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
+		tPtr.getNode(mm).Retain()
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
