@@ -848,13 +848,16 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 
 	snapForResetTo := txn.Snapshot()
 
-	iter, err := txn.Select("PhoneBook")
+	iter, err := txn.Select("PhoneBook", "Phone")
 	if err != nil {
 		t.Fatal("Failed to create iterator")
 	}
 
 	var p2 Phone
-	iter.Next(&p2)
+	if iter.Next(&p2) != true {
+		t.Fatal("No row found")
+	}
+
 	if p2.Name != "Harry" {
 		t.Fatal("Returned wrong row")
 	}
@@ -865,7 +868,10 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	iter, err = snapForResetTo.Select("PhoneBook", "Phone")
+	//
+	// Test return row without index sort
+	//
+	iter, err = snapForResetTo.Select("PhoneBook")
 	if err != nil {
 		t.Fatal("Failed to create iterator")
 	}
@@ -874,7 +880,21 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	if iter.Next(&p3) == false {
 		t.Fatal("No row found")
 	}
-	println(p3.Id, " ", p3.Name, " ", p3.Phone)
+	if p3.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
+
+	//
+	// Test return row with index sort
+	//
+	iter, err = snapForResetTo.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	if iter.Next(&p3) == false {
+		t.Fatal("No row found")
+	}
 	if p3.Name != "Harry" {
 		t.Fatal("Returned wrong row")
 	}
