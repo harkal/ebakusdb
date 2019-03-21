@@ -804,20 +804,21 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	// txn3 := db.GetRootSnapshot()
+	txn.ResetTo(snapForResetTo)
+	snapForResetTo.Release()
 
-	// iter, err = txn3.Select("PhoneBook")
-	// if err != nil {
-	// 	t.Fatal("Failed to create iterator")
-	// }
+	iter, err = txn.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
 
-	// var p5 Phone
-	// if iter.Next(&p5) == false {
-	// 	t.Fatal("No row found")
-	// }
-	// if p5.Name != "Harry" {
-	// 	t.Fatal("Returned wrong row")
-	// }
+	var p3 Phone
+	if iter.Next(&p3) == false {
+		t.Fatal("No row found")
+	}
+	if p3.Name != "Harry" {
+		t.Fatal("Returned wrong row")
+	}
 }
 
 func Test_ByteArrayCreation(t *testing.T) {
