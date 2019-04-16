@@ -485,6 +485,20 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		s.Insert(getTableKey(table), tblMarshaled)
 	}
 
+	var oldV reflect.Value
+	if oldVal != nil {
+		oldBytes := oldVal.getBytes(mm)
+		t := reflect.TypeOf(obj)
+		oldV = reflect.New(t)
+		s.db.decode(oldBytes, oldV.Interface())
+
+		if reflect.Ptr == t.Kind() {
+			oldV = reflect.Indirect(oldV)
+		}
+
+		defer oldVal.Release(mm)
+	}
+
 	// Do the additional indexes
 	for _, indexField := range tbl.Indexes {
 		if indexField == "Id" {
@@ -506,10 +520,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 
 		if oldVal != nil {
-			oldBytes := oldVal.getBytes(mm)
-			t := reflect.TypeOf(obj)
-			oldV := reflect.New(t)
-			s.db.decode(oldBytes, oldV.Interface())
+
 
 			oldIndexField := oldV.Elem().FieldByName(indexField)
 			if !oldIndexField.IsValid() {
@@ -529,7 +540,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
 			}
 
-			oldVal.Release(mm)
 		}
 
 		ik, err := getEncodedIndexKey(fv)

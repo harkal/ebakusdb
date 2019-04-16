@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -643,7 +644,91 @@ func Test_TableDuplicates(t *testing.T) {
 	}
 }
 
-func Test_DeleteIndexes(t *testing.T) {
+func Test_TablesInsertIndexes(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+		Extra uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable)
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Extra",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    1,
+		Stake: 2,
+		Extra: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    1,
+		Stake: 3,
+		Extra: 3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    2,
+		Stake: 3,
+		Extra: 3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	reflectType := reflect.StructOf([]reflect.StructField{
+		reflect.StructField{
+			Name: "Id",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+		reflect.StructField{
+			Name: "Stake",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+		reflect.StructField{
+			Name: "Extra",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+	})
+	reflectInstance := reflect.New(reflectType)
+	reflectInstance.Elem().FieldByName("Id").SetUint(1)
+	reflectInstance.Elem().FieldByName("Stake").SetUint(4)
+	reflectInstance.Elem().FieldByName("Extra").SetUint(4)
+
+	reflectInterface := reflectInstance.Interface()
+
+	if err := snap.InsertObj(WitnessesTable, reflectInterface); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, Witness{
+		Id:    1,
+		Stake: 5,
+		Extra: 5,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+}
+
+func Test_TablesDeleteIndexes(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
