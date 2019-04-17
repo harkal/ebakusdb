@@ -454,6 +454,10 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
 
+	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
+		panic("Object has to be a pointer")
+	}
+
 	v := reflect.ValueOf(obj)
 	v = reflect.Indirect(v)
 
@@ -491,10 +495,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		t := reflect.TypeOf(obj)
 		oldV = reflect.New(t)
 		s.db.decode(oldBytes, oldV.Interface())
-
-		if reflect.Ptr == t.Kind() {
-			oldV = reflect.Indirect(oldV)
-		}
+		oldV = reflect.Indirect(oldV)
 
 		defer oldVal.Release(mm)
 	}
@@ -520,7 +521,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 
 		if oldVal != nil {
-
 
 			oldIndexField := oldV.Elem().FieldByName(indexField)
 			if !oldIndexField.IsValid() {
