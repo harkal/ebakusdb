@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -397,11 +398,11 @@ func Test_Tables(t *testing.T) {
 		Phone: "555-3456",
 	}
 
-	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p1); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := txn.InsertObj("PhoneBook", Phone{
+	if err := txn.InsertObj("PhoneBook", &Phone{
 		Id:    2,
 		Name:  "Natasa",
 		Phone: "555-5433",
@@ -409,7 +410,7 @@ func Test_Tables(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := txn.InsertObj("PhoneBook", Phone{
+	if err := txn.InsertObj("PhoneBook", &Phone{
 		Id:    258,
 		Name:  "Aspa",
 		Phone: "555-1111",
@@ -417,7 +418,7 @@ func Test_Tables(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := txn.InsertObj("PhoneBook", Phone{
+	if err := txn.InsertObj("PhoneBook", &Phone{
 		Id:    1,
 		Name:  "Teo",
 		Phone: "555-2222",
@@ -520,7 +521,7 @@ func Test_TableOrdering(t *testing.T) {
 
 	snap := db.GetRootSnapshot()
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    [4]byte{1, 2, 3, 4},
 		Stake: 1000,
 	}); err != nil {
@@ -539,21 +540,21 @@ func Test_TableOrdering(t *testing.T) {
 		t.Fatal("Returned wrong row")
 	}
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    [4]byte{1, 2, 3, 5},
 		Stake: 2000,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    [4]byte{1, 2, 3, 6},
 		Stake: 100,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    [4]byte{1, 2, 2, 5},
 		Stake: 2,
 	}); err != nil {
@@ -593,7 +594,7 @@ func Test_TableDuplicates(t *testing.T) {
 
 	snap := db.GetRootSnapshot()
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    [4]byte{1, 2, 3, 4},
 		Stake: 1000,
 	}); err != nil {
@@ -623,7 +624,7 @@ func Test_TableDuplicates(t *testing.T) {
 	// force an update, and test that it doesn't duplicate the entry
 	w.Stake = 1001
 
-	if err := snap.InsertObj(WitnessesTable, w); err != nil {
+	if err := snap.InsertObj(WitnessesTable, &w); err != nil {
 		t.Fatal("Failed to update row error:", err)
 	}
 
@@ -643,7 +644,76 @@ func Test_TableDuplicates(t *testing.T) {
 	}
 }
 
-func Test_DeleteIndexes(t *testing.T) {
+func Test_TablesInsertIndexes(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+		Extra uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable)
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Extra",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 2,
+		Extra: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	reflectType := reflect.StructOf([]reflect.StructField{
+		reflect.StructField{
+			Name: "Id",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+		reflect.StructField{
+			Name: "Stake",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+		reflect.StructField{
+			Name: "Extra",
+			Type: reflect.TypeOf(uint64(0)),
+		},
+	})
+	reflectInstance := reflect.New(reflectType)
+	reflectInstance.Elem().FieldByName("Id").SetUint(1)
+	reflectInstance.Elem().FieldByName("Stake").SetUint(4)
+	reflectInstance.Elem().FieldByName("Extra").SetUint(4)
+
+	reflectInterface := reflectInstance.Interface()
+
+	if err := snap.InsertObj(WitnessesTable, reflectInterface); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 5,
+		Extra: 5,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+}
+
+func Test_TablesDeleteIndexes(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
@@ -665,14 +735,14 @@ func Test_DeleteIndexes(t *testing.T) {
 
 	snap := db.GetRootSnapshot()
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    1,
 		Stake: 200,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.InsertObj(WitnessesTable, Witness{
+	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    2,
 		Stake: 100,
 	}); err != nil {
@@ -734,7 +804,7 @@ func Test_SnapshotResetTo(t *testing.T) {
 		Phone: "555-3456",
 	}
 
-	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p1); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -765,7 +835,7 @@ func Test_SnapshotResetTo(t *testing.T) {
 		Phone: "555-3456",
 	}
 
-	if err := txn2.InsertObj("PhoneBook", p2); err != nil {
+	if err := txn2.InsertObj("PhoneBook", &p2); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -840,7 +910,7 @@ func Test_SnapshotResetToSelectNoEntries(t *testing.T) {
 		Phone: "555-3456",
 	}
 
-	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p1); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -859,7 +929,7 @@ func Test_SnapshotResetToSelectNoEntries(t *testing.T) {
 
 	p2.Name = "Harry who?"
 
-	if err := txn.InsertObj("PhoneBook", p2); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p2); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -905,7 +975,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 		Phone: "555-3456",
 	}
 
-	if err := txn.InsertObj("PhoneBook", p1); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p1); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
@@ -927,7 +997,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 
 	p2.Name = "Harry who?"
 
-	if err := txn.InsertObj("PhoneBook", p2); err != nil {
+	if err := txn.InsertObj("PhoneBook", &p2); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
