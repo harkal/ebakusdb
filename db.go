@@ -322,9 +322,9 @@ func (db *DB) Get(k []byte) (*[]byte, bool) {
 	return db.header.root.getNode(db.allocator).Get(db, k)
 }
 
-func (db *DB) CreateTable(table string) error {
+func (db *DB) CreateTable(table string, obj interface{}) error {
 	snap := db.GetRootSnapshot()
-	err := snap.CreateTable(table)
+	err := snap.CreateTable(table, obj)
 	if err != nil {
 		snap.Release()
 		return err

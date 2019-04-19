@@ -13,6 +13,7 @@ import (
 type Table struct {
 	Indexes []string
 	Node    Ptr
+	Schema  string
 }
 
 type IndexField struct {
@@ -59,6 +60,76 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 	}
 }
 
+func getTableInstance(tbl *Table) (interface{}, error) {
+	fields := strings.Split(tbl.Schema, ",")
+
+	if len(fields) < 1 {
+		return nil, fmt.Errorf("No fields in struct schema")
+	}
+
+	var sfields []reflect.StructField
+	for i, f := range fields {
+		a := strings.Split(f, " ")
+		aName, aType := a[0], a[1]
+
+		t, err := getReflectTypeFromString(aType)
+		if err != nil {
+			return nil, err
+		}
+
+		sf := reflect.StructField{
+			Name:  aName,
+			Type:  t,
+			Index: []int{i},
+		}
+		sfields = append(sfields, sf)
+	}
+
+	st := reflect.StructOf(sfields)
+	so := reflect.New(st)
+	return so.Interface(), nil
+}
+
+func getReflectTypeFromString(t string) (reflect.Type, error) {
+	switch t {
+	case "bool":
+		return reflect.TypeOf(true), nil
+	case "int":
+		return reflect.TypeOf(int(0)), nil
+	case "int8":
+		return reflect.TypeOf(int8(0)), nil
+	case "int16":
+		return reflect.TypeOf(int16(0)), nil
+	case "int32":
+		return reflect.TypeOf(int32(0)), nil
+	case "int64":
+		return reflect.TypeOf(int64(0)), nil
+	case "uint":
+		return reflect.TypeOf(uint(0)), nil
+	case "uint8":
+		return reflect.TypeOf(uint8(0)), nil
+	case "uint16":
+		return reflect.TypeOf(uint16(0)), nil
+	case "uint32":
+		return reflect.TypeOf(uint32(0)), nil
+	case "uint64":
+		return reflect.TypeOf(uint64(0)), nil
+	case "uintptr":
+		return reflect.TypeOf(uintptr(0)), nil
+	case "float32":
+		return reflect.TypeOf(float32(0)), nil
+	case "float64":
+		return reflect.TypeOf(float64(0)), nil
+	case "complex64":
+		return reflect.TypeOf(complex64(0)), nil
+	case "complex128":
+		return reflect.TypeOf(complex128(0)), nil
+	case "string":
+		return reflect.TypeOf(""), nil
+	}
+	return nil, fmt.Errorf("unsupported arg type: %s", t)
+}
+
 type Snapshot struct {
 	db   *DB
 	root Ptr
@@ -82,15 +153,33 @@ func (s *Snapshot) Get(k []byte) (*[]byte, bool) {
 	return s.root.getNode(s.db.allocator).Get(s.db, k)
 }
 
-func (s *Snapshot) CreateTable(table string) error {
+func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 	nPtr, _, err := newNode(s.db.allocator)
 	if err != nil {
 		return err
 	}
 
+	schema := ""
+	if reflect.Ptr == reflect.TypeOf(obj).Kind() {
+		st := reflect.ValueOf(obj).Elem()
+
+		if reflect.Struct == st.Kind() {
+			num := st.NumField()
+
+			inputs := make([]string, num)
+			for i := 0; i < num; i++ {
+				f := st.Field(i)
+				inputs[i] = fmt.Sprintf("%v %v", st.Type().Field(i).Name, f.Type())
+			}
+
+			schema = strings.Join(inputs, ",")
+		}
+	}
+
 	tlb := Table{
 		Node:    *nPtr,
 		Indexes: make([]string, 0),
+		Schema:  schema,
 	}
 
 	v, _ := s.db.encode(tlb)
