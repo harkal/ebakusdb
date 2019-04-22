@@ -275,9 +275,9 @@ func encodeKey(key []byte) []byte {
 	ret := make([]byte, len(key)*2)
 	i := 0
 	for _, k := range key {
-		ret[i] = k & 0xf
-		i++
 		ret[i] = k >> 4
+		i++
+		ret[i] = k & 0xf
 		i++
 	}
 	return ret
@@ -291,9 +291,9 @@ func decodeKey(key []byte) []byte {
 
 	j := 0
 	for i := 0; i < len(key)/2; i++ {
-		k := key[j]
+		k := key[j] << 4
 		j++
-		k |= key[j] << 4
+		k |= key[j]
 		j++
 		ret[i] = k
 	}

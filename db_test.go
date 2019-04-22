@@ -771,7 +771,7 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 	}
 
 	found := iter.Next(&w)
-	if !found && w.Id != 1 {
+	if !found && w.Id != 2 {
 		t.Fatal("Returned wrong row", &w, found)
 	}
 }
