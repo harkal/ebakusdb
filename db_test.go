@@ -792,10 +792,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 	txn.CreateTable("PhoneBook")
-	txn.CreateIndex(IndexField{
-		Table: "PhoneBook",
-		Field: "Name",
-	})
+
 	txn.CreateIndex(IndexField{
 		Table: "PhoneBook",
 		Field: "Phone",
@@ -814,7 +811,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 		Id:    2,
 		Name:  "Natasa",
 		Code:  "+31",
-		Phone: "1433",
+		Phone: "1",
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
@@ -823,7 +820,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 		Id:    2,
 		Name:  "Natasa",
 		Code:  "+41",
-		Phone: "2433",
+		Phone: "2",
 	}); err != nil {
 		t.Fatal("Failed to update row error:", err)
 	}
