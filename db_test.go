@@ -776,6 +776,69 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 	}
 }
 
+func Test_TablesUpdateIndexes(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Code  string
+		Phone string
+	}
+
+	txn := db.GetRootSnapshot()
+	txn.CreateTable("PhoneBook")
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Name",
+	})
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Phone",
+	})
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    1,
+		Name:  "Harry",
+		Code:  "+30",
+		Phone: "555-3456",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    2,
+		Name:  "Natasa",
+		Code:  "+31",
+		Phone: "1433",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    2,
+		Name:  "Natasa",
+		Code:  "+41",
+		Phone: "2433",
+	}); err != nil {
+		t.Fatal("Failed to update row error:", err)
+	}
+
+	iter, err := txn.Select("PhoneBook", "Phone")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var p3 Phone
+	if found := iter.Next(&p3); !found || p3.Id != 2 {
+		t.Fatal("Returned wrong row", p3, found)
+	}
+}
+
 func Test_SnapshotResetTo(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
