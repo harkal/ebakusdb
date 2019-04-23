@@ -426,7 +426,7 @@ func (s *Snapshot) mergeChild(n *Node) {
 	childPtr.NodeRelease(mm)
 }
 
-func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr, oldVal *ByteArray) {
+func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray) {
 	mm := s.db.allocator
 	n := nPtr.getNode(mm)
 
@@ -436,8 +436,10 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr, oldVa
 			return nil, nil
 		}
 
-		oldVal = &n.valPtr
+		var oldVal ByteArray
+		oldVal = n.valPtr
 		oldVal.Retain(mm)
+
 		// Remove the leaf node
 		ncPtr := s.writeNode(nPtr)
 		nc := ncPtr.getNode(mm)
@@ -449,20 +451,20 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr, oldVa
 			s.mergeChild(nc)
 		}
 
-		return ncPtr, oldVal
+		return ncPtr, &oldVal
 	}
 
 	edgeLabel := search[0]
 	childPtr := n.edges[edgeLabel]
 	if childPtr.isNull() {
-		return nil, oldVal
+		return nil, nil
 	}
 
 	child := childPtr.getNode(mm)
 	childPrefix := child.prefixPtr.getBytes(mm)
 
 	if !bytes.HasPrefix(search, childPrefix) {
-		return nil, oldVal
+		return nil, nil
 	}
 
 	// Consume the search prefix
@@ -623,6 +625,10 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				return fmt.Errorf("Old object doesn't have an %s field", indexField)
 			}
 
+			if fv.Interface() == oldIndexField.Interface() {
+				continue
+			}
+
 			oldKey, err := getEncodedIndexKey(oldIndexField)
 			if err != nil {
 				return err
@@ -636,10 +642,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			if newRoot != nil {
 				tPtr.NodeRelease(mm)
 				tPtr = *newRoot
-				tPtrMarshaled, _ := s.db.encode(tPtr)
-				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
 			}
-
 		}
 
 		ik, err := getEncodedIndexKey(fv)
