@@ -386,7 +386,7 @@ func Test_Tables(t *testing.T) {
 	}
 
 	txn := db.GetRootSnapshot()
-	txn.CreateTable("PhoneBook")
+	txn.CreateTable("PhoneBook", &Phone{})
 	txn.CreateIndex(IndexField{
 		Table: "PhoneBook",
 		Field: "Phone",
@@ -513,7 +513,7 @@ func Test_TableOrdering(t *testing.T) {
 
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable)
+	db.CreateTable(WitnessesTable, &Witness{})
 	db.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
@@ -586,7 +586,7 @@ func Test_TableDuplicates(t *testing.T) {
 
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable)
+	db.CreateTable(WitnessesTable, &Witness{})
 	db.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
@@ -659,7 +659,7 @@ func Test_TablesInsertIndexes(t *testing.T) {
 
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable)
+	db.CreateTable(WitnessesTable, &Witness{})
 	db.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
@@ -727,7 +727,7 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable)
+	db.CreateTable(WitnessesTable, &Witness{})
 	db.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
@@ -791,7 +791,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 	}
 
 	txn := db.GetRootSnapshot()
-	txn.CreateTable("PhoneBook")
+	txn.CreateTable("PhoneBook", &Phone{})
 
 	txn.CreateIndex(IndexField{
 		Table: "PhoneBook",
@@ -831,7 +831,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 	}
 
 	var p3 Phone
-	if found := iter.Next(&p3); !found || p3.Id != 2 {
+	if found := iter.Next(&p3); !found || p3.Name != "Natasa" {
 		t.Fatal("Returned wrong row", p3, found)
 	}
 }
@@ -852,7 +852,7 @@ func Test_SnapshotResetTo(t *testing.T) {
 	txn := db.GetRootSnapshot()
 	// defer txn.Release()
 
-	txn.CreateTable("PhoneBook")
+	txn.CreateTable("PhoneBook", &Phone{})
 	txn.CreateIndex(IndexField{
 		Table: "PhoneBook",
 		Field: "Phone",
@@ -962,7 +962,7 @@ func Test_SnapshotResetToSelectNoEntries(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	txn.CreateTable("PhoneBook")
+	txn.CreateTable("PhoneBook", &Phone{})
 
 	p1 := Phone{
 		Id:    0,
@@ -982,8 +982,7 @@ func Test_SnapshotResetToSelectNoEntries(t *testing.T) {
 	}
 
 	var p2 Phone
-	iter.Next(&p2)
-	if p2.Name != "Harry" {
+	if found := iter.Next(&p2); !found || p2.Name != "Harry" {
 		t.Fatal("Returned wrong row")
 	}
 
@@ -1023,7 +1022,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	txn.CreateTable("PhoneBook")
+	txn.CreateTable("PhoneBook", &Phone{})
 	txn.CreateIndex(IndexField{
 		Table: "PhoneBook",
 		Field: "Phone",

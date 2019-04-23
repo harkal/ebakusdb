@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -13,6 +14,7 @@ import (
 type Table struct {
 	Indexes []string
 	Node    Ptr
+	Schema  string
 }
 
 type IndexField struct {
@@ -59,6 +61,76 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 	}
 }
 
+func getTableInstance(tbl *Table) (interface{}, error) {
+	fields := strings.Split(tbl.Schema, ",")
+
+	if len(fields) < 1 {
+		return nil, fmt.Errorf("No fields in struct schema")
+	}
+
+	var sfields []reflect.StructField
+	for i, f := range fields {
+		a := strings.Split(f, " ")
+		aName, aType := a[0], a[1]
+
+		t, err := getReflectTypeFromString(aType)
+		if err != nil {
+			return nil, err
+		}
+
+		sf := reflect.StructField{
+			Name:  aName,
+			Type:  t,
+			Index: []int{i},
+		}
+		sfields = append(sfields, sf)
+	}
+
+	st := reflect.StructOf(sfields)
+	so := reflect.New(st)
+	return so.Interface(), nil
+}
+
+func getReflectTypeFromString(t string) (reflect.Type, error) {
+	switch t {
+	case "bool":
+		return reflect.TypeOf(true), nil
+	case "int":
+		return reflect.TypeOf(int(0)), nil
+	case "int8":
+		return reflect.TypeOf(int8(0)), nil
+	case "int16":
+		return reflect.TypeOf(int16(0)), nil
+	case "int32":
+		return reflect.TypeOf(int32(0)), nil
+	case "int64":
+		return reflect.TypeOf(int64(0)), nil
+	case "uint":
+		return reflect.TypeOf(uint(0)), nil
+	case "uint8":
+		return reflect.TypeOf(uint8(0)), nil
+	case "uint16":
+		return reflect.TypeOf(uint16(0)), nil
+	case "uint32":
+		return reflect.TypeOf(uint32(0)), nil
+	case "uint64":
+		return reflect.TypeOf(uint64(0)), nil
+	case "uintptr":
+		return reflect.TypeOf(uintptr(0)), nil
+	case "float32":
+		return reflect.TypeOf(float32(0)), nil
+	case "float64":
+		return reflect.TypeOf(float64(0)), nil
+	case "complex64":
+		return reflect.TypeOf(complex64(0)), nil
+	case "complex128":
+		return reflect.TypeOf(complex128(0)), nil
+	case "string":
+		return reflect.TypeOf(""), nil
+	}
+	return nil, fmt.Errorf("unsupported arg type: %s", t)
+}
+
 type Snapshot struct {
 	db   *DB
 	root Ptr
@@ -82,15 +154,33 @@ func (s *Snapshot) Get(k []byte) (*[]byte, bool) {
 	return s.root.getNode(s.db.allocator).Get(s.db, k)
 }
 
-func (s *Snapshot) CreateTable(table string) error {
+func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 	nPtr, _, err := newNode(s.db.allocator)
 	if err != nil {
 		return err
 	}
 
+	schema := ""
+	if reflect.Ptr == reflect.TypeOf(obj).Kind() {
+		st := reflect.ValueOf(obj).Elem()
+
+		if reflect.Struct == st.Kind() {
+			num := st.NumField()
+
+			inputs := make([]string, num)
+			for i := 0; i < num; i++ {
+				f := st.Field(i)
+				inputs[i] = fmt.Sprintf("%v %v", st.Type().Field(i).Name, f.Type())
+			}
+
+			schema = strings.Join(inputs, ",")
+		}
+	}
+
 	tlb := Table{
 		Node:    *nPtr,
 		Indexes: make([]string, 0),
+		Schema:  schema,
 	}
 
 	v, _ := s.db.encode(tlb)
@@ -336,15 +426,19 @@ func (s *Snapshot) mergeChild(n *Node) {
 	childPtr.NodeRelease(mm)
 }
 
-func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
+func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray) {
 	mm := s.db.allocator
 	n := nPtr.getNode(mm)
 
 	// Check for key exhaustion
 	if len(search) == 0 {
 		if !n.isLeaf() {
-			return nil
+			return nil, nil
 		}
+
+		var oldVal ByteArray
+		oldVal = n.valPtr
+		oldVal.Retain(mm)
 
 		// Remove the leaf node
 		ncPtr := s.writeNode(nPtr)
@@ -357,27 +451,27 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 			s.mergeChild(nc)
 		}
 
-		return ncPtr
+		return ncPtr, &oldVal
 	}
 
 	edgeLabel := search[0]
 	childPtr := n.edges[edgeLabel]
 	if childPtr.isNull() {
-		return nil
+		return nil, nil
 	}
 
 	child := childPtr.getNode(mm)
 	childPrefix := child.prefixPtr.getBytes(mm)
 
 	if !bytes.HasPrefix(search, childPrefix) {
-		return nil
+		return nil, nil
 	}
 
 	// Consume the search prefix
 	search = search[len(childPrefix):]
-	newChildPtr := s.delete(nPtr, &childPtr, search)
+	newChildPtr, oldVal := s.delete(nPtr, &childPtr, search)
 	if newChildPtr == nil {
-		return nil
+		return nil, oldVal
 	}
 
 	newChild := newChildPtr.getNode(mm)
@@ -396,7 +490,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 		nc.edges[edgeLabel] = *newChildPtr
 	}
 
-	return ncPtr
+	return ncPtr, oldVal
 }
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
@@ -437,7 +531,11 @@ func (s *Snapshot) Delete(k []byte) bool {
 
 	mm := s.db.allocator
 	k = encodeKey(k)
-	newRoot := s.delete(nil, &s.root, k)
+	newRoot, oldVal := s.delete(nil, &s.root, k)
+	if oldVal != nil {
+		oldVal.Release(mm)
+	}
+
 	if newRoot != nil {
 		s.root.NodeRelease(mm)
 		s.root = *newRoot
@@ -527,19 +625,24 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				return fmt.Errorf("Old object doesn't have an %s field", indexField)
 			}
 
+			if fv.Interface() == oldIndexField.Interface() {
+				continue
+			}
+
 			oldKey, err := getEncodedIndexKey(oldIndexField)
 			if err != nil {
 				return err
 			}
 			oldKey = encodeKey(oldKey)
-			newRoot := s.delete(nil, &tPtr, oldKey)
+			newRoot, oldIVal := s.delete(nil, &tPtr, oldKey)
+			if oldIVal != nil {
+				oldIVal.Release(mm)
+			}
+
 			if newRoot != nil {
 				tPtr.NodeRelease(mm)
 				tPtr = *newRoot
-				tPtrMarshaled, _ := s.db.encode(tPtr)
-				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
 			}
-
 		}
 
 		ik, err := getEncodedIndexKey(fv)
@@ -578,7 +681,28 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 
 	mm := s.db.allocator
 
-	newRoot := s.delete(nil, &tbl.Node, ek)
+	newRoot, oldVal := s.delete(nil, &tbl.Node, ek)
+	if oldVal != nil {
+		defer oldVal.Release(mm)
+	}
+	var oldV reflect.Value
+	if len(tbl.Indexes) > 0 {
+		if oldVal == nil {
+			return fmt.Errorf("Old value not found")
+		}
+
+		obj, err := getTableInstance(&tbl)
+		if err != nil {
+			return err
+		}
+
+		oldV = reflect.ValueOf(obj)
+
+		oldBytes := oldVal.getBytes(mm)
+		s.db.decode(oldBytes, obj)
+		oldV = reflect.Indirect(oldV)
+	}
+
 	if newRoot != nil {
 		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
@@ -586,43 +710,44 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		s.Insert(getTableKey(table), tblMarshaled)
 	}
 
-	/*
-		// Do the additional indexes
-		for _, indexField := range tbl.Indexes {
-			if indexField == "Id" {
-				continue
-			}
-
-			ifield := IndexField{Table: table, Field: indexField}
-			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
-			if found == false {
-				return fmt.Errorf("Unknown index")
-			}
-			var tPtr Ptr
-			s.db.decode(*tPtrMarshaled, &tPtr)
-
-			fv := v.FieldByName(indexField)
-			if !fv.IsValid() {
-				return fmt.Errorf("Object doesn't have an %s field", indexField)
-			}
-
-			ik, err := getEncodedIndexKey(fv)
-			if err != nil {
-				return err
-			}
-			ik = encodeKey(ik)
-
-			pKeyPtr := *newBytesFromSlice(mm, k)
-			newRoot, _, _ := s.insert(&tPtr, ik, ik, pKeyPtr)
-			pKeyPtr.Release(mm)
-			if newRoot != nil {
-				tPtr.NodeRelease(mm)
-				tPtr = *newRoot
-				tPtrMarshaled, _ := s.db.encode(tPtr)
-				s.Insert(ifield.getIndexKey(), tPtrMarshaled)
-			}
+	// Do the additional indexes
+	for _, indexField := range tbl.Indexes {
+		if indexField == "Id" {
+			continue
 		}
-	*/
+
+		ifield := IndexField{Table: table, Field: indexField}
+		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+		if found == false {
+			return fmt.Errorf("Unknown index")
+		}
+		var tPtr Ptr
+		s.db.decode(*tPtrMarshaled, &tPtr)
+		tPtr.getNode(mm).Retain()
+
+		fv := oldV.FieldByName(indexField)
+		if !fv.IsValid() {
+			return fmt.Errorf("Object doesn't have an %s field", indexField)
+		}
+
+		ik, err := getEncodedIndexKey(fv)
+
+		if err != nil {
+			return err
+		}
+		ik = encodeKey(ik)
+		newRoot, oldIVal := s.delete(nil, &tPtr, ik)
+		if oldIVal != nil {
+			oldIVal.Release(mm)
+		}
+
+		if newRoot != nil {
+			tPtr.NodeRelease(mm)
+			tPtr = *newRoot
+			tPtrMarshaled, _ := s.db.encode(tPtr)
+			s.Insert(ifield.getIndexKey(), tPtrMarshaled)
+		}
+	}
 
 	return nil
 }
