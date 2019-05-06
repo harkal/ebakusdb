@@ -770,7 +770,8 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		tPtr.getNode(mm).Retain()
+		n := tPtr.getNode(mm)
+		n.Retain()
 
 		fv := oldV.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -783,11 +784,46 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			return err
 		}
 		ik = encodeKey(ik)
-		newRoot, oldIVal := s.delete(nil, &tPtr, ik)
+
+		oldKeys := make([][]byte, 0)
+		oldKeysMarshalled, found := n.Get(s.db, ik)
+		if found {
+			s.db.decode(*oldKeysMarshalled, &oldKeys)
+		}
+
+		var newRoot *Ptr
+		var oldIVal *ByteArray
+
+		// When multiple entries, remove the single entry and update
+		if len(oldKeys) > 1 {
+			found := false
+			for i, v := range oldKeys {
+				if bytes.Equal(k, v) {
+					oldKeys = append(oldKeys[:i], oldKeys[i+1:]...)
+					found = true
+				}
+			}
+			if !found {
+				return fmt.Errorf("Key to be deleted not found")
+			}
+
+			ivMarshaled, err := s.db.encode(oldKeys)
+			if err != nil {
+				return err
+			}
+
+			pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
+			newRoot, oldIVal, _ = s.insert(&tPtr, ik, ik, pKeyPtr)
+			pKeyPtr.Release(mm)
+
+			// When single entry, remove the node
+		} else {
+			newRoot, oldIVal = s.delete(nil, &tPtr, ik)
+		}
+
 		if oldIVal != nil {
 			oldIVal.Release(mm)
 		}
-
 		if newRoot != nil {
 			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
