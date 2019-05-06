@@ -836,6 +836,185 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 	}
 }
 
+func Test_TablesInsertIndexesWithSameValue(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    2,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := snap.Select(WitnessesTable, "Stake")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var w Witness
+	ws := make(map[uint64]bool)
+
+	for iter.Next(&w) {
+		ws[w.Id] = true
+	}
+
+	if len(ws) != 2 {
+		t.Fatal("Wrong number of entries, expected: 2, got:", len(ws))
+	}
+
+	if !ws[1] || !ws[2] {
+		t.Fatal("Wrong entries", ws)
+	}
+}
+
+func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    2,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint64(2)); err != nil {
+		t.Fatal("Failed to delete row error:", err)
+	}
+
+	iter, err := snap.Select(WitnessesTable, "Stake")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var w Witness
+
+	iter.Next(&w)
+	if w.Id != 1 {
+		t.Fatal("Returned wrong row", w)
+	}
+
+	if iter.Next(&w) {
+		t.Fatal("Shouldn't return row", w)
+	}
+}
+
+func Test_TablesUpdateIndexesWithSameValue(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    2,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	// Update Witness #1
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    1,
+		Stake: 3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := snap.Select(WitnessesTable, "Stake")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var w Witness
+	ws := make(map[uint64]uint64)
+
+	for iter.Next(&w) {
+		ws[w.Id] = w.Stake
+	}
+
+	if len(ws) != 2 {
+		t.Fatal("Wrong number of entries, expected: 2, got:", len(ws))
+	}
+
+	if ws[1] != 3 || ws[2] != 2 {
+		t.Fatal("Wrong entries", ws)
+	}
+}
+
 func Test_SnapshotResetTo(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
