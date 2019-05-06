@@ -619,8 +619,8 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			return fmt.Errorf("Object doesn't have an %s field", indexField)
 		}
 
+		// Update old indexes
 		if oldVal != nil {
-
 			oldIndexField := oldV.Elem().FieldByName(indexField)
 			if !oldIndexField.IsValid() {
 				return fmt.Errorf("Old object doesn't have an %s field", indexField)
@@ -630,16 +630,51 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				continue
 			}
 
-			oldKey, err := getEncodedIndexKey(oldIndexField)
+			oldIk, err := getEncodedIndexKey(oldIndexField)
 			if err != nil {
 				return err
 			}
-			oldKey = encodeKey(oldKey)
-			newRoot, oldIVal := s.delete(nil, &tPtr, oldKey)
+			oldIk = encodeKey(oldIk)
+
+			oldUKeys := make([][]byte, 0)
+			oldUKeysMarshalled, found := n.Get(s.db, oldIk)
+			if found {
+				s.db.decode(*oldUKeysMarshalled, &oldUKeys)
+			}
+
+			var newRoot *Ptr
+			var oldIVal *ByteArray
+
+			// When multiple entries, remove the single entry and update
+			if len(oldUKeys) > 1 {
+				found := false
+				for i, v := range oldUKeys {
+					if bytes.Equal(k, v) {
+						oldUKeys = append(oldUKeys[:i], oldUKeys[i+1:]...)
+						found = true
+					}
+				}
+				if !found {
+					return fmt.Errorf("Indexed key not found in old position")
+				}
+
+				ivMarshaled, err := s.db.encode(oldUKeys)
+				if err != nil {
+					return err
+				}
+
+				pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
+				newRoot, oldIVal, _ = s.insert(&tPtr, oldIk, oldIk, pKeyPtr)
+				pKeyPtr.Release(mm)
+
+				// When single entry, remove the node
+			} else {
+				newRoot, oldIVal = s.delete(nil, &tPtr, oldIk)
+			}
+
 			if oldIVal != nil {
 				oldIVal.Release(mm)
 			}
-
 			if newRoot != nil {
 				tPtr.NodeRelease(mm)
 				tPtr = *newRoot
