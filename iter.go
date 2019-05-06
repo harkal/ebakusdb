@@ -137,46 +137,71 @@ func (i *Iterator) Prev() ([]byte, []byte, bool) {
 }
 
 type ResultIterator struct {
-	db   *DB
-	iter *Iterator
+	db      *DB
+	iter    *Iterator
+	entries [][]byte
 
 	tableRoot *Node
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
-	_, value, ok := ri.iter.Next()
-	if !ok {
-		return ok
-	}
 	if ri.tableRoot != nil {
-		pKey := encodeKey(value)
-		value, ok := ri.tableRoot.Get(ri.db, pKey)
+		if len(ri.entries) == 0 {
+			_, value, ok := ri.iter.Next()
+			if !ok {
+				return false
+			}
+			ri.db.decode(value, &ri.entries)
+			return ri.Next(val)
+		}
+
+		ik, ok := ri.entries[0], true
+		ri.entries = ri.entries[1:]
+
+		ik = encodeKey(ik)
+		value, ok := ri.tableRoot.Get(ri.db, ik)
 		if !ok {
 			return false
 		}
 		ri.db.decode(*value, val)
 	} else {
+		_, value, ok := ri.iter.Next()
+		if !ok {
+			return false
+		}
 		ri.db.decode(value, val)
 	}
 
-	return ok
+	return true
 }
 
 func (ri *ResultIterator) Prev(val interface{}) bool {
-	_, value, ok := ri.iter.Prev()
-	if !ok {
-		return ok
-	}
 	if ri.tableRoot != nil {
-		pKey := encodeKey(value)
-		value, ok := ri.tableRoot.Get(ri.db, pKey)
+		if len(ri.entries) == 0 {
+			_, value, ok := ri.iter.Prev()
+			if !ok {
+				return ok
+			}
+			ri.db.decode(value, &ri.entries)
+			return ri.Prev(val)
+		}
+
+		ik, ok := ri.entries[len(ri.entries)-1], true
+		ri.entries = ri.entries[:len(ri.entries)-1]
+
+		ik = encodeKey(ik)
+		value, ok := ri.tableRoot.Get(ri.db, ik)
 		if !ok {
 			return false
 		}
 		ri.db.decode(*value, val)
 	} else {
+		_, value, ok := ri.iter.Prev()
+		if !ok {
+			return false
+		}
 		ri.db.decode(value, val)
 	}
 
-	return ok
+	return true
 }

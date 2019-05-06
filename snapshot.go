@@ -373,7 +373,7 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 
 	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
 
-	// If the new key is a subset, add to to this node
+	// If the new key is a subset, add to this node
 	search = search[commonPrefix:]
 	if len(search) == 0 {
 		splitNode.keyPtr = *newBytesFromSlice(mm, k)
@@ -559,8 +559,8 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	v := reflect.ValueOf(obj)
 	v = reflect.Indirect(v)
 
-	fv := v.FieldByName("Id")
-	if !fv.IsValid() {
+	pv := v.FieldByName("Id")
+	if !pv.IsValid() {
 		return fmt.Errorf("Object doesn't have an id field")
 	}
 
@@ -571,7 +571,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	mm := s.db.allocator
 
-	k, err := getEncodedIndexKey(fv)
+	k, err := getEncodedIndexKey(pv)
 	if err != nil {
 		return err
 	}
@@ -611,7 +611,8 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		tPtr.getNode(mm).Retain()
+		n := tPtr.getNode(mm)
+		n.Retain()
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -651,7 +652,18 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 		ik = encodeKey(ik)
 
-		pKeyPtr := *newBytesFromSlice(mm, k)
+		oldKeys := make([][]byte, 0)
+		oldKeysMarshalled, found := n.Get(s.db, ik)
+		if found {
+			s.db.decode(*oldKeysMarshalled, &oldKeys)
+		}
+		keys := append(oldKeys, k)
+		ivMarshaled, err := s.db.encode(keys)
+		if err != nil {
+			return err
+		}
+
+		pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
 		newRoot, _, _ := s.insert(&tPtr, ik, ik, pKeyPtr)
 		pKeyPtr.Release(mm)
 		if newRoot != nil {
