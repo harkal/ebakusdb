@@ -155,7 +155,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			return ri.Next(val)
 		}
 
-		ik, ok := ri.entries[0], true
+		ik := ri.entries[0]
 		ri.entries = ri.entries[1:]
 
 		ik = encodeKey(ik)
@@ -186,7 +186,7 @@ func (ri *ResultIterator) Prev(val interface{}) bool {
 			return ri.Prev(val)
 		}
 
-		ik, ok := ri.entries[len(ri.entries)-1], true
+		ik := ri.entries[len(ri.entries)-1]
 		ri.entries = ri.entries[:len(ri.entries)-1]
 
 		ik = encodeKey(ik)
