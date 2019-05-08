@@ -893,6 +893,170 @@ func Test_TablesInsertIndexesWithSameValue(t *testing.T) {
 	}
 }
 
+func Test_TablesIdUpdate(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [40]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	from := [20]byte{188, 57, 27, 29, 188, 95, 177, 25, 98, 184, 251, 65, 144, 7, 185, 2, 224, 170, 107, 245}
+	p1 := [20]byte{78, 210, 172, 164, 249, 179, 238, 144, 79, 244, 79, 3, 233, 31, 222, 144, 130, 154, 131, 129}
+	p2 := [20]byte{146, 240, 14, 127, 238, 34, 17, 210, 48, 175, 190, 64, 153, 24, 94, 250, 58, 81, 108, 191}
+	p3 := from
+	var d1, d2, d3, d4 [40]byte
+
+	copy(d1[:], from[:])
+	copy(d1[20:], p1[:])
+
+	copy(d2[:], from[:])
+	copy(d2[20:], p2[:])
+
+	copy(d3[:], from[:])
+	copy(d3[20:], p3[:])
+
+	copy(d4[:], p2[:])
+	copy(d4[20:], from[:])
+
+	fmt.Println("------ Insert 4")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d4,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Select 3")
+
+	iter, err := snap.Select(DelegationsTable, "Id", from)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	delegationsToBeDeleted := make([][40]byte, 0)
+
+	var d Delegation
+	for iter.Next(&d) {
+		fmt.Println(d)
+		delegationsToBeDeleted = append(delegationsToBeDeleted, d.Id)
+	}
+
+	fmt.Println("------ Delete 3")
+
+	for _, delegationId := range delegationsToBeDeleted {
+		fmt.Println("del", delegationId)
+		if err := snap.DeleteObj(DelegationsTable, delegationId); err != nil {
+			fmt.Println("err", err)
+		}
+	}
+
+	fmt.Println("------ Insert 3")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d4,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Select 3")
+
+	iter, err = snap.Select(DelegationsTable, "Id", from)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	for iter.Next(&d) {
+		fmt.Println(d)
+	}
+
+	fmt.Println("------ Delete 3")
+
+	for _, delegationId := range delegationsToBeDeleted {
+		fmt.Println("del", delegationId)
+		if err := snap.DeleteObj(DelegationsTable, delegationId); err != nil {
+			fmt.Println("err", err)
+		}
+	}
+
+	fmt.Println("------ Select 0")
+
+	iter, err = snap.Select(DelegationsTable, "Id", from)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	for iter.Next(&d) {
+		fmt.Println(d)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	iter, err = snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	for iter.Next(&d) {
+		fmt.Println(d)
+	}
+
+	fmt.Println("------")
+
+	// if found := iter.Next(&d); !found || !bytes.Equal(d.Id, []byte{1, 2}) {
+	// 	t.Fatal("Wrong entry", d, found)
+	// }
+
+	// if found := iter.Next(&d); !found || !bytes.Equal(d.Id, []byte{1, 3}) {
+	// 	t.Fatal("Wrong entry", d, found)
+	// }
+
+	t.Error("te")
+}
+
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
