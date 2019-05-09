@@ -1065,7 +1065,7 @@ func Test_TablesIdUpdate2(t *testing.T) {
 	}
 
 	type Delegation struct {
-		Id [40]byte
+		Id [2]byte
 	}
 
 	const DelegationsTable string = "Delegations"
@@ -1073,16 +1073,16 @@ func Test_TablesIdUpdate2(t *testing.T) {
 	db.CreateTable(DelegationsTable, &Delegation{})
 	snap := db.GetRootSnapshot()
 
-	from := [20]byte{188, 57, 27, 29, 188, 95, 177, 25, 98, 184, 251, 65, 144, 7, 185, 2, 224, 170, 107, 245}
-	p2 := [20]byte{146, 240, 14, 127, 238, 34, 17, 210, 48, 175, 190, 64, 153, 24, 94, 250, 58, 81, 108, 191}
+	from := [1]byte{16}
+	p2 := [1]byte{1}
 	p3 := from
-	var d3, d4 [40]byte
+	var d3, d4 [2]byte
 
 	copy(d3[:], from[:])
-	copy(d3[20:], p3[:])
+	copy(d3[1:], p3[:])
 
 	copy(d4[:], p2[:])
-	copy(d4[20:], from[:])
+	copy(d4[1:], from[:])
 
 	fmt.Println("------ Insert 2")
 
@@ -1124,10 +1124,9 @@ func Test_TablesIdUpdate2(t *testing.T) {
 		fmt.Println(d)
 		i++
 		if i > 1 || d.Id != d4 {
-			// t.Fatal("Found wrong rows", i, d)
+			t.Fatal("Found wrong rows", i, d)
 		}
 	}
-	t.Error("a")
 }
 
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
