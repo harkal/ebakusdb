@@ -1057,6 +1057,79 @@ func Test_TablesIdUpdate(t *testing.T) {
 	t.Error("te")
 }
 
+func Test_TablesIdUpdate2(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [40]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	from := [20]byte{188, 57, 27, 29, 188, 95, 177, 25, 98, 184, 251, 65, 144, 7, 185, 2, 224, 170, 107, 245}
+	p2 := [20]byte{146, 240, 14, 127, 238, 34, 17, 210, 48, 175, 190, 64, 153, 24, 94, 250, 58, 81, 108, 191}
+	p3 := from
+	var d3, d4 [40]byte
+
+	copy(d3[:], from[:])
+	copy(d3[20:], p3[:])
+
+	copy(d4[:], p2[:])
+	copy(d4[20:], from[:])
+
+	fmt.Println("------ Insert 2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d4,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete d3")
+	if err := snap.DeleteObj(DelegationsTable, d3); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Update d4")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: d4,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	i := 0
+	for iter.Next(&d) {
+		fmt.Println(d)
+		i++
+		if i > 1 || d.Id != d4 {
+			// t.Fatal("Found wrong rows", i, d)
+		}
+	}
+	t.Error("a")
+}
+
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
