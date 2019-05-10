@@ -290,9 +290,10 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
 	mm := s.db.allocator
 	n := nodePtr.getNode(mm)
+	nKey := n.keyPtr.getBytes(mm)
 
 	// Handle key exhaustion
-	if len(search) == 0 {
+	if len(search) == 0 || bytes.Equal(nKey, search) {
 		var oldVal ByteArray
 		didUpdate := false
 		if n.isLeaf() {
