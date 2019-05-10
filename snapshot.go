@@ -455,7 +455,6 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		return ncPtr, &oldVal
 	}
 
-
 	edgeLabel := search[0]
 	childPtr := n.edges[edgeLabel]
 	if childPtr.isNull() {
