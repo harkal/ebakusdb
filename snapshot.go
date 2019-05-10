@@ -290,10 +290,9 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
 	mm := s.db.allocator
 	n := nodePtr.getNode(mm)
-	nKey := n.keyPtr.getBytes(mm)
 
 	// Handle key exhaustion
-	if len(search) == 0 || bytes.Equal(nKey, search) {
+	if len(search) == 0 {
 		var oldVal ByteArray
 		didUpdate := false
 		if n.isLeaf() {
@@ -311,10 +310,6 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 		nc.valPtr.Retain(mm)
 
 		return ncPtr, &oldVal, didUpdate
-	}
-
-	if len(nKey) == 0 {
-		search = search[len(nKey):]
 	}
 
 	edgeLabel := search[0]
@@ -435,10 +430,9 @@ func (s *Snapshot) mergeChild(n *Node) {
 func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray) {
 	mm := s.db.allocator
 	n := nPtr.getNode(mm)
-	nKey := n.keyPtr.getBytes(mm)
 
 	// Check for key exhaustion
-	if len(search) == 0 || bytes.Equal(nKey, search) {
+	if len(search) == 0 {
 		if !n.isLeaf() {
 			return nil, nil
 		}
@@ -461,9 +455,6 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		return ncPtr, &oldVal
 	}
 
-	if len(nKey) == 0 {
-		search = search[len(nKey):]
-	}
 
 	edgeLabel := search[0]
 	childPtr := n.edges[edgeLabel]
