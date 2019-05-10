@@ -149,6 +149,10 @@ func (s *Snapshot) GetId() uint64 {
 	return uint64(s.root)
 }
 
+func (s *Snapshot) GetFreeMemory() uint64 {
+	return s.db.allocator.GetFree()
+}
+
 func (s *Snapshot) Get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
 	return s.root.getNode(s.db.allocator).Get(s.db, k)
