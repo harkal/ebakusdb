@@ -771,8 +771,12 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 	}
 
 	found := iter.Next(&w)
-	if !found && w.Id != 2 {
+	if !found || w.Id != 1 {
 		t.Fatal("Returned wrong row", &w, found)
+	}
+
+	if iter.Next(&w) {
+		t.Fatal("Shouldn't find second row")
 	}
 }
 
@@ -1256,9 +1260,9 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 
 	var w Witness
 
-	iter.Next(&w)
-	if w.Id != 1 {
-		t.Fatal("Returned wrong row", w)
+	found := iter.Next(&w)
+	if !found || w.Id != 1 {
+		t.Fatal("Returned wrong row", w, found)
 	}
 
 	if iter.Next(&w) {
