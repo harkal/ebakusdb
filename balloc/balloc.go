@@ -108,6 +108,10 @@ func (b *BufferAllocator) GetFree() uint64 {
 	return b.bufferSize - atomic.LoadUint64(&b.header.TotalUsed)
 }
 
+func (b *BufferAllocator) GetUsed() uint64 {
+	return atomic.LoadUint64(&b.header.TotalUsed)
+}
+
 func (b *BufferAllocator) GetCapacity() uint64 {
 	return b.bufferSize
 }
