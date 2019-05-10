@@ -1023,6 +1023,55 @@ func Test_InsertLookupPrefixAfterMerge(t *testing.T) {
 	}
 }
 
+func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [2]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [2]byte{1, 20}
+	p2 := [2]byte{20, 1}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.DeleteObj(DelegationsTable, p1); err != nil {
+		fmt.Println("err", err)
+	}
+	if err := snap.DeleteObj(DelegationsTable, p2); err != nil {
+		fmt.Println("err", err)
+	}
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if iter.Next(&d) {
+		t.Fatal("Found rows", d)
+	}
+}
+
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())

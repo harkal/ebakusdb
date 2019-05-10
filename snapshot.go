@@ -431,9 +431,10 @@ func (s *Snapshot) mergeChild(n *Node) {
 func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray) {
 	mm := s.db.allocator
 	n := nPtr.getNode(mm)
+	nKey := n.keyPtr.getBytes(mm)
 
 	// Check for key exhaustion
-	if len(search) == 0 {
+	if len(search) == 0 || bytes.Equal(nKey, search) {
 		if !n.isLeaf() {
 			return nil, nil
 		}
