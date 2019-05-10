@@ -485,7 +485,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 	nc.edges[edgeLabel].NodeRelease(mm)
 	if newChild.isLeaf() == false && newChild.getFirstChild() == 0 {
 		nc.edges[edgeLabel] = 0
-		if *nPtr != s.root && nc.hasOneChild() && !nc.isLeaf() {
+		if *nPtr != s.root && parentPtr != nil && nc.hasOneChild() && !nc.isLeaf() {
 			s.mergeChild(nc)
 		}
 		newChildPtr.NodeRelease(mm)
