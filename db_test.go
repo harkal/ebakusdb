@@ -1054,10 +1054,85 @@ func Test_TablesIdUpdate(t *testing.T) {
 	// 	t.Fatal("Wrong entry", d, found)
 	// }
 
-	t.Error("te")
+	// t.Error("te")
 }
 
-func Test_TablesIdUpdate2(t *testing.T) {
+func Test_TablesSelectReturnsWrongRows(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [2]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [1]byte{1}
+	p2 := [1]byte{20}
+	var p1d1, p1d2 [2]byte
+	var p2d1, p2d2 [2]byte
+
+	copy(p1d1[:], p1[:])
+	copy(p1d1[1:], p1[:])
+
+	copy(p1d2[:], p1[:])
+	copy(p1d2[1:], p2[:])
+
+	copy(p2d1[:], p2[:])
+	copy(p2d1[1:], p1[:])
+
+	copy(p2d2[:], p2[:])
+	copy(p2d2[1:], p2[:])
+
+	fmt.Println("------ Insert p1d")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1d2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Insert p2d")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete 1 for p2d")
+
+	if err := snap.DeleteObj(DelegationsTable, p2d1); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Select 0 for p2d")
+
+	iter, err := snap.Select(DelegationsTable, "Id", p2)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var d Delegation
+	for iter.Next(&d) {
+		fmt.Println("  ", d)
+		t.Fatal("Shouldn't find row", d)
+	}
+}
+
+func Test_InsertLookupPrefixAfterMerge(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
@@ -1104,6 +1179,11 @@ func Test_TablesIdUpdate2(t *testing.T) {
 
 	fmt.Println("------ Update d4")
 
+	// if err := snap.InsertObj(DelegationsTable, &Delegation{
+	// 	Id: d3,
+	// }); err != nil {
+	// 	t.Fatal("Failed to insert row error:", err)
+	// }
 	if err := snap.InsertObj(DelegationsTable, &Delegation{
 		Id: d4,
 	}); err != nil {
