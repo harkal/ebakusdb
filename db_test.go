@@ -1023,6 +1023,115 @@ func Test_InsertLookupPrefixAfterMerge(t *testing.T) {
 	}
 }
 
+func Test_InsertLookupPrefixAfterMergeOnParentTableNode(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [3]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [3]byte{1, 20, 0}
+	p2 := [3]byte{20, 1, 0}
+	p3 := [3]byte{20, 1, 40}
+
+	fmt.Println("------ Insert 2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete p1")
+	if err := snap.DeleteObj(DelegationsTable, p1); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Update p2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Insert p3")
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Check prefix")
+
+	fmt.Print("\n\n")
+
+	mm := db.allocator
+	tPtrMarshaled, _ := snap.Get([]byte("t_" + DelegationsTable))
+	var tbl Table
+	db.decode(*tPtrMarshaled, &tbl)
+	tNode := tbl.Node.getNode(mm)
+
+	tNodePrefix := tNode.prefixPtr.getBytes(mm)
+	if len(tNodePrefix) != 0 {
+		t.Fatal("Parent node has prefix set:", tNodePrefix)
+	}
+
+	childPtr := tNode.getFirstChild()
+	child := childPtr.getNode(mm)
+
+	childPrefix := child.prefixPtr.getBytes(mm)
+	expectedPrefix := encodeKey(p3[:2])
+	if !bytes.Equal(childPrefix, expectedPrefix) {
+		t.Fatal("Child has wrong prefix:", childPrefix, "expectedPrefix:", expectedPrefix)
+	}
+
+	p2NodePrefix := encodeKey(p2[2:])
+	p2Node := child.edges[p2NodePrefix[0]].getNode(mm)
+	p2NodeKey := p2Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p2NodeKey, encodeKey(p2[:])) {
+		t.Fatal("p2 node is wrong:", p2NodeKey)
+	}
+
+	p3NodePrefix := encodeKey(p3[2:])
+	p3Node := child.edges[p3NodePrefix[0]].getNode(mm)
+	p3NodeKey := p3Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p3NodeKey, encodeKey(p3[:])) {
+		t.Fatal("p3 node is wrong:", p3NodeKey)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if found := iter.Next(&d); !found || d.Id != p2 {
+		t.Fatal("Found wrong row (expected p2)", found, d)
+	}
+
+	if found := iter.Next(&d); !found || d.Id != p3 {
+		t.Fatal("Found wrong row (expected p3)", found, d)
+	}
+}
+
 func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
