@@ -450,7 +450,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		nc.valPtr.Release(mm)
 
 		// Check if this node should be merged
-		if *nPtr != s.root && nc.hasOneChild() {
+		if *nPtr != s.root && nc.hasOneChild() && parentPtr != nil {
 			s.mergeChild(nc)
 		}
 
