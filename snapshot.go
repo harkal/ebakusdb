@@ -397,11 +397,19 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	return ncPtr, nil, false
 }
 
+// mergeChild merges a trie node with its parent node.
+//
+// NOTE: don't merge back to the root trie node,
+//       as insert() doesn't handle search lookup properly.
 func (s *Snapshot) mergeChild(n *Node) {
 	mm := s.db.allocator
 
 	childPtr := n.getFirstChild()
 	child := childPtr.getNode(mm)
+
+	if !n.hasOneChild() || n.isLeaf() {
+		panic("Can't merge non leaf child node")
+	}
 
 	// Merge the nodes.
 	mergedPrefix := concat(n.prefixPtr.getBytes(mm), child.prefixPtr.getBytes(mm))
