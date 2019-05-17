@@ -34,12 +34,6 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 			return
 		}
 
-		nPrefix := n.prefixPtr.getBytes(i.mm)
-		if len(nPrefix) != 0 && bytes.Equal(search, prefix) {
-			i.node = nil
-			return
-		}
-
 		nPtr := n.edges[search[0]]
 		if nPtr.isNull() {
 			i.node = nil
