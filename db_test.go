@@ -771,8 +771,12 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 	}
 
 	found := iter.Next(&w)
-	if !found && w.Id != 2 {
+	if !found || w.Id != 1 {
 		t.Fatal("Returned wrong row", &w, found)
+	}
+
+	if iter.Next(&w) {
+		t.Fatal("Shouldn't find second row")
 	}
 }
 
@@ -893,6 +897,403 @@ func Test_TablesInsertIndexesWithSameValue(t *testing.T) {
 	}
 }
 
+func Test_TablesSelectReturnsWrongRows(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [2]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1d1 := [2]byte{1, 1}
+	p1d2 := [2]byte{1, 2}
+	p2d1 := [2]byte{20, 1}
+
+	fmt.Println("------ Insert p1d")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1d2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Insert p2d")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2d1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete 1 for p2d")
+
+	if err := snap.DeleteObj(DelegationsTable, p2d1); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Select 0 for p2d")
+
+	iter, err := snap.Select(DelegationsTable, "Id", p2d1[:1] /* 20 */)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	var d Delegation
+	for iter.Next(&d) {
+		fmt.Println("  ", d)
+		t.Fatal("Shouldn't find row", d)
+	}
+}
+
+func Test_InsertLookupPrefixAfterMerge(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [2]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [2]byte{1, 20}
+	p2 := [2]byte{20, 1}
+
+	fmt.Println("------ Insert 2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete p1")
+	if err := snap.DeleteObj(DelegationsTable, p1); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Update p2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	i := 0
+	for iter.Next(&d) {
+		fmt.Println(d)
+		i++
+		if i > 1 || d.Id != p2 {
+			t.Fatal("Found wrong rows", i, d)
+		}
+	}
+}
+
+func Test_InsertLookupPrefixAfterMergeOnParentTableNode(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [3]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [3]byte{1, 20, 0}
+	p2 := [3]byte{20, 1, 0}
+	p3 := [3]byte{20, 1, 40}
+
+	fmt.Println("------ Insert 2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Delete p1")
+	if err := snap.DeleteObj(DelegationsTable, p1); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Update p2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Insert p3")
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Check prefix")
+
+	fmt.Print("\n\n")
+
+	mm := db.allocator
+	tPtrMarshaled, _ := snap.Get([]byte("t_" + DelegationsTable))
+	var tbl Table
+	db.decode(*tPtrMarshaled, &tbl)
+	tNode := tbl.Node.getNode(mm)
+
+	tNodePrefix := tNode.prefixPtr.getBytes(mm)
+	if len(tNodePrefix) != 0 {
+		t.Fatal("Parent node has prefix set:", tNodePrefix)
+	}
+
+	childPtr := tNode.getFirstChild()
+	child := childPtr.getNode(mm)
+
+	childPrefix := child.prefixPtr.getBytes(mm)
+	expectedPrefix := encodeKey(p3[:2])
+	if !bytes.Equal(childPrefix, expectedPrefix) {
+		t.Fatal("Child has wrong prefix:", childPrefix, "expectedPrefix:", expectedPrefix)
+	}
+
+	p2NodePrefix := encodeKey(p2[2:])
+	p2Node := child.edges[p2NodePrefix[0]].getNode(mm)
+	p2NodeKey := p2Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p2NodeKey, encodeKey(p2[:])) {
+		t.Fatal("p2 node is wrong:", p2NodeKey)
+	}
+
+	p3NodePrefix := encodeKey(p3[2:])
+	p3Node := child.edges[p3NodePrefix[0]].getNode(mm)
+	p3NodeKey := p3Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p3NodeKey, encodeKey(p3[:])) {
+		t.Fatal("p3 node is wrong:", p3NodeKey)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if found := iter.Next(&d); !found || d.Id != p2 {
+		t.Fatal("Found wrong row (expected p2)", found, d)
+	}
+
+	if found := iter.Next(&d); !found || d.Id != p3 {
+		t.Fatal("Found wrong row (expected p3)", found, d)
+	}
+}
+
+func Test_InsertLookupPrefixAfterMergeOnParentTableNodeForEmptyIdValue(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id []byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := []byte{20}
+	p2 := []byte{}
+	p3 := []byte{40, 0}
+
+	fmt.Println("------ Insert 2")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Select p2 (has empty Id)")
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id", p2)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if found := iter.Next(&d); !found {
+		t.Fatal("Haven't found row with empty Id", found, d)
+	}
+
+	fmt.Println("------ Delete p2 (has empty Id)")
+
+	if err := snap.DeleteObj(DelegationsTable, p2); err != nil {
+		fmt.Println("err", err)
+	}
+
+	fmt.Println("------ Check prefix p1")
+
+	mm := db.allocator
+	tPtrMarshaled, _ := snap.Get([]byte("t_" + DelegationsTable))
+	var tbl Table
+	db.decode(*tPtrMarshaled, &tbl)
+	tNode := tbl.Node.getNode(mm)
+
+	tNodePrefix := tNode.prefixPtr.getBytes(mm)
+	if len(tNodePrefix) != 0 {
+		t.Fatal("Parent node has prefix set:", tNodePrefix)
+	}
+
+	p1NodePrefix := encodeKey(p1)
+	p1Node := tNode.edges[p1NodePrefix[0]].getNode(mm)
+	p1NodeKey := p1Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p1NodeKey, encodeKey(p1[:])) {
+		t.Fatal("p1 node is wrong:", p1NodeKey)
+	}
+
+	fmt.Println("------ Insert p3")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	fmt.Println("------ Check prefix p3")
+
+	tPtrMarshaled, _ = snap.Get([]byte("t_" + DelegationsTable))
+	db.decode(*tPtrMarshaled, &tbl)
+	tNode = tbl.Node.getNode(mm)
+
+	p3NodePrefix := encodeKey(p3)
+	p3Node := tNode.edges[p3NodePrefix[0]].getNode(mm)
+	p3NodeKey := p3Node.keyPtr.getBytes(mm)
+	if !bytes.Equal(p3NodeKey, encodeKey(p3[:])) {
+		t.Fatal("p3 node is wrong:", p3NodeKey)
+	}
+
+	fmt.Println("------ Select ALL")
+
+	iter, err = snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if found := iter.Next(&d); !found || !bytes.Equal(d.Id, p1) {
+		t.Fatal("Found wrong row (expected p2)", found, d)
+	}
+
+	if found := iter.Next(&d); !found || !bytes.Equal(d.Id, p3) {
+		t.Fatal("Found wrong row (expected p3)", found, d)
+	}
+
+	if found := iter.Next(&d); found {
+		t.Fatal("Found more rows", found, d)
+	}
+}
+
+func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Delegation struct {
+		Id [2]byte
+	}
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+	snap := db.GetRootSnapshot()
+
+	p1 := [2]byte{1, 20}
+	p2 := [2]byte{20, 1}
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.DeleteObj(DelegationsTable, p1); err != nil {
+		fmt.Println("err", err)
+	}
+	if err := snap.DeleteObj(DelegationsTable, p2); err != nil {
+		fmt.Println("err", err)
+	}
+
+	var d Delegation
+
+	iter, err := snap.Select(DelegationsTable, "Id")
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	if iter.Next(&d) {
+		t.Fatal("Found rows", d)
+	}
+}
+
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
@@ -940,9 +1341,9 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 
 	var w Witness
 
-	iter.Next(&w)
-	if w.Id != 1 {
-		t.Fatal("Returned wrong row", w)
+	found := iter.Next(&w)
+	if !found || w.Id != 1 {
+		t.Fatal("Returned wrong row", w, found)
 	}
 
 	if iter.Next(&w) {

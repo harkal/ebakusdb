@@ -298,6 +298,7 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
 	mm := s.db.allocator
 	n := nodePtr.getNode(mm)
+
 	// Handle key exhaustion
 	if len(search) == 0 {
 		var oldVal ByteArray
@@ -404,11 +405,19 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	return ncPtr, nil, false
 }
 
+// mergeChild merges a trie node with its parent node.
+//
+// NOTE: don't merge back to the root trie node,
+//       as insert() doesn't handle search lookup properly.
 func (s *Snapshot) mergeChild(n *Node) {
 	mm := s.db.allocator
 
 	childPtr := n.getFirstChild()
 	child := childPtr.getNode(mm)
+
+	if !n.hasOneChild() || n.isLeaf() {
+		panic("Can't merge non leaf child node")
+	}
 
 	// Merge the nodes.
 	mergedPrefix := concat(n.prefixPtr.getBytes(mm), child.prefixPtr.getBytes(mm))
@@ -455,7 +464,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		nc.valPtr.Release(mm)
 
 		// Check if this node should be merged
-		if *nPtr != s.root && nc.hasOneChild() {
+		if *nPtr != s.root && nc.hasOneChild() && parentPtr != nil {
 			s.mergeChild(nc)
 		}
 
@@ -490,7 +499,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 	nc.edges[edgeLabel].NodeRelease(mm)
 	if newChild.isLeaf() == false && newChild.getFirstChild() == 0 {
 		nc.edges[edgeLabel] = 0
-		if *nPtr != s.root && nc.hasOneChild() && !nc.isLeaf() {
+		if *nPtr != s.root && parentPtr != nil && nc.hasOneChild() && !nc.isLeaf() {
 			s.mergeChild(nc)
 		}
 		newChildPtr.NodeRelease(mm)
