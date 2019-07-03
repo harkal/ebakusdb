@@ -499,6 +499,82 @@ func Test_Tables(t *testing.T) {
 	txn.Release()
 }
 
+func Test_TablesSelect(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Phone struct {
+		Id    uint64
+		Name  string
+		Phone string
+	}
+
+	txn := db.GetRootSnapshot()
+	txn.CreateTable("PhoneBook", &Phone{})
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Name",
+	})
+	txn.CreateIndex(IndexField{
+		Table: "PhoneBook",
+		Field: "Phone",
+	})
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    0,
+		Name:  "Harry Kalogirou",
+		Phone: "555-2222",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    1,
+		Name:  "Harry Who",
+		Phone: "555-1111",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := txn.InsertObj("PhoneBook", &Phone{
+		Id:    2,
+		Name:  "Chris",
+		Phone: "555-1333",
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	iter, err := txn.Select("PhoneBook", "Name LIKE Harry", "Phone ASC")
+	if err != nil {
+		t.Fatal("Failed to create iterator")
+	}
+
+	var p Phone
+	for iter.Next(&p) {
+		fmt.Printf("%d %s %s\n", p.Id, p.Name, p.Phone)
+	}
+
+	found := iter.Next(&p)
+	if !found || p.Id != 1 {
+		t.Fatal("Returned wrong row", &p, found)
+	}
+
+	found = iter.Next(&p)
+	if !found || p.Id != 0 {
+		t.Fatal("Returned wrong row", &p, found)
+	}
+
+	found = iter.Next(&p)
+	if found {
+		t.Fatal("Shouldn't return more rows", &p, found)
+	}
+
+	txn.Release()
+}
+
 func Test_TableOrdering(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
