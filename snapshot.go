@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -850,6 +851,90 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 
 	return nil
+}
+
+type WhereCondition int
+
+const (
+	Equal WhereCondition = iota
+	Smaller
+	SmallerOrEqual
+	Larger
+	LargerOrEqual
+	Like
+)
+
+type WhereField struct {
+	Field     string
+	Condition WhereCondition
+	Value     string
+}
+
+func (s *Snapshot) WhereParser(query string) *WhereField {
+	re := regexp.MustCompile(`^\b(\w+)\b\s(<[=>]?|==?|>=?|LIKE)\s([A-Za-z0-9\s]+)$`)
+	parts := re.FindStringSubmatch(query)
+
+	if len(parts) == 0 {
+		return nil
+	}
+
+	var condition WhereCondition
+
+	switch parts[2] {
+	case "=", "==":
+		condition = Equal
+	case "<":
+		condition = Smaller
+	case "<=":
+		condition = SmallerOrEqual
+	case ">":
+		condition = Larger
+	case ">=":
+		condition = LargerOrEqual
+	case "LIKE":
+		condition = Like
+	}
+
+	return &WhereField{
+		Field:     parts[1],
+		Condition: condition,
+		Value:     parts[3],
+	}
+}
+
+type OrderCondition int
+
+const (
+	ASC OrderCondition = iota
+	DESC
+)
+
+type OrderField struct {
+	Field string
+	Order OrderCondition
+}
+
+func (s *Snapshot) OrderParser(query string) *OrderField {
+	re := regexp.MustCompile(`^\b(\w+)\b\s?(ASC|DESC)?$`)
+	parts := re.FindStringSubmatch(query)
+
+	if len(parts) == 0 {
+		return nil
+	}
+
+	var order OrderCondition
+
+	switch parts[2] {
+	case "DESC":
+		order = DESC
+	default:
+		order = ASC
+	}
+
+	return &OrderField{
+		Field: parts[1],
+		Order: order,
+	}
 }
 
 func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, error) {

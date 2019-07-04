@@ -499,6 +499,61 @@ func Test_Tables(t *testing.T) {
 	txn.Release()
 }
 
+func Test_TableWhereParser(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	txn := db.GetRootSnapshot()
+
+	query := txn.WhereParser("")
+	if query != nil {
+		t.Fatal("Wrong where query", query)
+	}
+
+	query = txn.WhereParser("WHERE Name <= Harry")
+	if query != nil {
+		t.Fatal("Wrong where query", query)
+	}
+
+	query = txn.WhereParser("Name === Harry")
+	if query != nil {
+		t.Fatal("Wrong where query", query)
+	}
+
+	query = txn.WhereParser("Name = Harry")
+	if query.Condition != Equal {
+		t.Fatal("Wrong where query", query)
+	}
+
+	query = txn.WhereParser("Name <= Harry")
+	if query.Condition != SmallerOrEqual {
+		t.Fatal("Wrong where query", query)
+	}
+}
+
+func Test_TableOrderParser(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	txn := db.GetRootSnapshot()
+
+	query := txn.OrderParser("Name")
+	if query.Order != ASC {
+		t.Fatal("Wrong order query", query)
+	}
+
+	query = txn.OrderParser("Name DESC")
+	if query.Order != DESC {
+		t.Fatal("Wrong order query", query)
+	}
+}
+
 func Test_TablesSelect(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
