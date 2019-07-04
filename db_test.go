@@ -499,6 +499,49 @@ func Test_Tables(t *testing.T) {
 	txn.Release()
 }
 
+func Test_QueryTokenizer(t *testing.T) {
+	// WHERE query
+	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "LIKE"})
+
+	// "Name LIKE a b  "
+	expected := [][]byte{[]byte{78, 97, 109, 101}, []byte{76, 73, 75, 69}, []byte{97, 32, 98, 0, 240}}
+	parts := tokenizer.Tokenize([]byte{78, 97, 109, 101, 32, 76, 73, 75, 69, 32, 97, 32, 98, 0, 240})
+	if len(parts) != 3 || !reflect.DeepEqual(parts, expected) {
+		t.Fatal("Wrong output", parts)
+	}
+
+	// "Name>a b  "
+	expected = [][]byte{[]byte{78, 97, 109, 101}, []byte{62}, []byte{97, 32, 98, 0, 240}}
+	parts = tokenizer.Tokenize([]byte{78, 97, 109, 101, 62, 97, 32, 98, 0, 240})
+	if len(parts) != 3 || !reflect.DeepEqual(parts, expected) {
+		t.Fatal("Wrong output", parts)
+	}
+
+	// "Name> a b  "
+	expected = [][]byte{[]byte{78, 97, 109, 101}, []byte{62}, []byte{97, 32, 98, 0, 240}}
+	parts = tokenizer.Tokenize([]byte{78, 97, 109, 101, 62, 32, 97, 32, 98, 0, 240})
+	if len(parts) != 3 || !reflect.DeepEqual(parts, expected) {
+		t.Fatal("Wrong output", parts)
+	}
+
+	// "Name LIKE a LIKE b  "
+	expected = [][]byte{[]byte{78, 97, 109, 101}, []byte{76, 73, 75, 69}, []byte{97, 32, 76, 73, 75, 69, 32, 98, 0, 240}}
+	parts = tokenizer.Tokenize([]byte{78, 97, 109, 101, 32, 76, 73, 75, 69, 32, 97, 32, 76, 73, 75, 69, 32, 98, 0, 240})
+	if len(parts) != 3 || !reflect.DeepEqual(parts, expected) {
+		t.Fatal("Wrong output", parts)
+	}
+
+	// ORDER query
+	tokenizer = NewTokenizer([]string{"ASC", "DESC"})
+
+	// "Name DESC"
+	expected = [][]byte{[]byte{78, 97, 109, 101}, []byte{68, 69, 83, 67}}
+	parts = tokenizer.Tokenize([]byte{78, 97, 109, 101, 32, 68, 69, 83, 67})
+	if len(parts) != 2 || !reflect.DeepEqual(parts, expected) {
+		t.Fatal("Wrong output", parts)
+	}
+}
+
 func Test_TableWhereParser(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
