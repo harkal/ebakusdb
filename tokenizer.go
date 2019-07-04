@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"reflect"
+	"sort"
 )
 
 // Tokenizer interface
@@ -22,6 +23,11 @@ func NewTokenizer(seps []string) Tokenizer {
 
 func (t tokenizer) Tokenize(content []byte) [][]byte {
 	length := len(content)
+
+	if length == 0 {
+		return [][]byte{}
+	}
+
 	cut := make([]int, length)
 
 byteWalker:
@@ -94,6 +100,12 @@ func convertSeparators(seps []string) map[uint8][][]byte {
 	for _, r := range seps {
 		b := []byte(r)
 		separators[b[0]] = append(separators[b[0]], []byte(r))
+	}
+
+	for _, sep := range separators {
+		sort.SliceStable(sep, func(i, j int) bool {
+			return len(sep[i]) > len(sep[j])
+		})
 	}
 
 	return separators

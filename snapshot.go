@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -867,12 +866,12 @@ const (
 type WhereField struct {
 	Field     string
 	Condition WhereCondition
-	Value     string
+	Value     []byte
 }
 
-func (s *Snapshot) WhereParser(query string) *WhereField {
-	re := regexp.MustCompile(`^\b(\w+)\b\s(<[=>]?|==?|>=?|LIKE)\s([A-Za-z0-9\s]+)$`)
-	parts := re.FindStringSubmatch(query)
+func (s *Snapshot) WhereParser(input []byte) *WhereField {
+	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "LIKE"})
+	parts := tokenizer.Tokenize(input)
 
 	if len(parts) == 0 {
 		return nil
@@ -880,7 +879,7 @@ func (s *Snapshot) WhereParser(query string) *WhereField {
 
 	var condition WhereCondition
 
-	switch parts[2] {
+	switch string(parts[1]) {
 	case "=", "==":
 		condition = Equal
 	case "<":
@@ -896,9 +895,9 @@ func (s *Snapshot) WhereParser(query string) *WhereField {
 	}
 
 	return &WhereField{
-		Field:     parts[1],
+		Field:     string(parts[0]),
 		Condition: condition,
-		Value:     parts[3],
+		Value:     parts[2],
 	}
 }
 
@@ -914,25 +913,22 @@ type OrderField struct {
 	Order OrderCondition
 }
 
-func (s *Snapshot) OrderParser(query string) *OrderField {
-	re := regexp.MustCompile(`^\b(\w+)\b\s?(ASC|DESC)?$`)
-	parts := re.FindStringSubmatch(query)
+func (s *Snapshot) OrderParser(input []byte) *OrderField {
+	tokenizer := NewTokenizer([]string{"ASC", "DESC"})
+	parts := tokenizer.Tokenize(input)
 
 	if len(parts) == 0 {
 		return nil
 	}
 
-	var order OrderCondition
+	order := ASC
 
-	switch parts[2] {
-	case "DESC":
+	if len(parts) == 2 && string(parts[1]) == "DESC" {
 		order = DESC
-	default:
-		order = ASC
 	}
 
 	return &OrderField{
-		Field: parts[1],
+		Field: string(parts[0]),
 		Order: order,
 	}
 }

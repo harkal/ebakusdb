@@ -551,27 +551,18 @@ func Test_TableWhereParser(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	query := txn.WhereParser("")
+	query := txn.WhereParser([]byte(""))
 	if query != nil {
 		t.Fatal("Wrong where query", query)
 	}
 
-	query = txn.WhereParser("WHERE Name <= Harry")
-	if query != nil {
-		t.Fatal("Wrong where query", query)
-	}
 
-	query = txn.WhereParser("Name === Harry")
-	if query != nil {
-		t.Fatal("Wrong where query", query)
-	}
-
-	query = txn.WhereParser("Name = Harry")
+	query = txn.WhereParser([]byte("Name = Harry"))
 	if query.Condition != Equal {
 		t.Fatal("Wrong where query", query)
 	}
 
-	query = txn.WhereParser("Name <= Harry")
+	query = txn.WhereParser([]byte("Name <= Harry"))
 	if query.Condition != SmallerOrEqual {
 		t.Fatal("Wrong where query", query)
 	}
@@ -586,12 +577,12 @@ func Test_TableOrderParser(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	query := txn.OrderParser("Name")
+	query := txn.OrderParser([]byte("Name"))
 	if query.Order != ASC {
 		t.Fatal("Wrong order query", query)
 	}
 
-	query = txn.OrderParser("Name DESC")
+	query = txn.OrderParser([]byte("Name DESC"))
 	if query.Order != DESC {
 		t.Fatal("Wrong order query", query)
 	}
