@@ -61,7 +61,7 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 	}
 }
 
-func getTableInstance(tbl *Table) (interface{}, error) {
+func getTableStructInstance(tbl *Table) (interface{}, error) {
 	fields := strings.Split(tbl.Schema, ",")
 
 	if len(fields) < 1 {
@@ -755,7 +755,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			return fmt.Errorf("Old value not found")
 		}
 
-		obj, err := getTableInstance(&tbl)
+		obj, err := getTableStructInstance(&tbl)
 		if err != nil {
 			return err
 		}
