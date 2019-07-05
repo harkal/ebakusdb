@@ -142,21 +142,43 @@ type ResultIterator struct {
 	entries [][]byte
 
 	tableRoot *Node
+	ordering  OrderCondition
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
+	nextIter := func() ([]byte, []byte, bool) {
+		if ri.ordering == DESC {
+			return ri.iter.Prev()
+		}
+		return ri.iter.Next()
+	}
+
+	next := func(val interface{}) bool {
+		if ri.ordering == DESC {
+			return ri.Prev(val)
+		}
+		return ri.Next(val)
+	}
+
 	if ri.tableRoot != nil {
 		if len(ri.entries) == 0 {
-			_, value, ok := ri.iter.Next()
+			_, value, ok := nextIter() //ri.iter.Next()
 			if !ok {
 				return false
 			}
 			ri.db.decode(value, &ri.entries)
-			return ri.Next(val)
+			return next(val) //ri.Next(val)
 		}
 
-		ik := ri.entries[0]
-		ri.entries = ri.entries[1:]
+		var ik []byte
+		if ri.ordering == DESC {
+			ik = ri.entries[len(ri.entries)-1]
+			ri.entries = ri.entries[:len(ri.entries)-1]
+
+		} else {
+			ik = ri.entries[0]
+			ri.entries = ri.entries[1:]
+		}
 
 		ik = encodeKey(ik)
 		value, ok := ri.tableRoot.Get(ri.db, ik)
@@ -165,7 +187,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 		ri.db.decode(*value, val)
 	} else {
-		_, value, ok := ri.iter.Next()
+		_, value, ok := nextIter() //ri.iter.Next()
 		if !ok {
 			return false
 		}
