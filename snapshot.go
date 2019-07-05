@@ -999,6 +999,98 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}, nil
 }
 
+func (s *Snapshot) Select2(table string, whereClause *WhereField, orderObj *OrderField) (*ResultIterator, error) {
+	tPtrMarshaled, found := s.Get(getTableKey(table))
+	if found == false {
+		return nil, fmt.Errorf("Unknown table")
+	}
+	var tbl Table
+	s.db.decode(*tPtrMarshaled, &tbl)
+
+	var iter *Iterator
+	var tblNode *Node
+
+	if whereClause == nil && orderObj == nil {
+		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
+	} else {
+
+		var indexField string
+		var prefix []byte
+
+		if orderObj != nil {
+			indexField = orderObj.Field
+		}
+
+		if whereClause != nil {
+			// obj, err := getTableStructInstance(&tbl)
+			// if err != nil {
+			// 	return err
+			// }
+
+			// v = reflect.ValueOf(obj)
+
+			// val := s.Get(...)
+			// bytes := val.getBytes(mm)
+			// s.db.decode(bytes, obj)
+			// v = reflect.Indirect(v)
+			// ----
+
+			// obj, err := getTableStructInstance(&tbl)
+			// if err != nil {
+			// 	return nil, err
+			// }
+
+			// schema := reflect.ValueOf(obj)
+			// schema = reflect.Indirect(schema)
+
+			// schema.FieldByName(where.Field).SetBytes(where.Value)
+
+			// for i := 0; i < schema.NumField(); i++ {
+			// 	varName := schema.Type().Field(i).Name
+			// 	varType := schema.Type().Field(i).Type
+			// 	varValue := schema.Field(i).Interface()
+			// 	fmt.Printf("%v %v %v\n", varName, varType, varValue)
+			// }
+
+			prefix = whereClause.Value
+			fmt.Println("====")
+			fmt.Println(prefix)
+		}
+
+		if indexField == "Id" {
+			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
+			if whereClause != nil {
+				// iter.SeekPrefix(prefix)
+				// iter.Where(whereClause)
+			}
+		} else {
+			ifield := IndexField{Table: table, Field: indexField}
+			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+			if found == false {
+				return nil, fmt.Errorf("Unknown index")
+			}
+			var tPtr Ptr
+			s.db.decode(*tPtrMarshaled, &tPtr)
+			iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
+
+			if whereClause != nil {
+				// iter.SeekPrefix(prefix)
+				// iter.Where(whereClause)
+			}
+
+			tblNode = tbl.Node.getNode(s.db.allocator)
+		}
+	}
+
+	return &ResultIterator{
+		db:          s.db,
+		iter:        iter,
+		tableRoot:   tblNode,
+		whereClause: whereClause,
+		ordering:    orderObj.Order,
+	}, nil
+}
+
 func (s *Snapshot) Root() *Ptr {
 	return &s.root
 }

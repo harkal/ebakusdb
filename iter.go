@@ -142,7 +142,10 @@ type ResultIterator struct {
 	entries [][]byte
 
 	tableRoot *Node
-	ordering  OrderCondition
+
+	whereClause *WhereField
+	ordering    OrderCondition
+}
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
@@ -192,6 +195,50 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			return false
 		}
 		ri.db.decode(value, val)
+	}
+
+	if ri.whereClause != nil {
+		obj := reflect.ValueOf(val)
+		obj = reflect.Indirect(obj)
+
+		v := obj.FieldByName(ri.whereClause.Field)
+		if !v.IsValid() {
+			return true
+		}
+
+		whereInputType := reflect.TypeOf(v.Interface())
+		fmt.Println(whereInputType)
+		whereInput := reflect.New(whereInputType)
+		whereInputI := whereInput.Elem().Interface()
+		// fmt.Println(whereInput)
+		// whereI := reflect.ValueOf(whereInputI)
+		// whereI = reflect.Indirect(whereI)
+
+		var err error
+		// if whereInputType.Name() == "string" {
+		// 	err = json.Unmarshal([]byte(strconv.Quote(string(ri.whereClause.Value))), &whereInputI)
+		// } else {
+		// err := Set(whereInput, strconv.Quote(ri.whereClause.Value))
+		err = json.Unmarshal(ri.whereClause.Value, &whereInputI)
+		// }
+		fmt.Println('-', whereInputI, err, ri.whereClause.Value)
+
+		fmt.Println(whereInputI, &whereInputI)
+		fmt.Println(v.Interface(), whereInputI)
+		fmt.Println("=", v.Interface().(uint64))
+
+		// whereInputI := reflect.ValueOf(whereInputI)
+
+		switch ri.whereClause.Condition {
+		case Equal:
+			if v.Interface() != whereInputI {
+				return next(val)
+			}
+		case LargerOrEqual:
+			if ok, _ := ge(v, whereInput); !ok {
+				return next(val)
+			}
+		}
 	}
 
 	return true
