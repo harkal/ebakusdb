@@ -897,10 +897,15 @@ func (s *Snapshot) WhereParser(input []byte) *WhereField {
 		condition = Like
 	}
 
+	var val []byte
+	if len(parts) >= 3 {
+		val = parts[2]
+	}
+
 	return &WhereField{
 		Field:     string(parts[0]),
 		Condition: condition,
-		Value:     parts[2],
+		Value:     val,
 	}
 }
 
@@ -949,12 +954,17 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	var whereClause *WhereField
 	var orderClause *OrderField
 
-	if len(args) >= 1 {
+	if len(args) >= 1 && args[0] != nil {
 		whereClause = args[0].(*WhereField)
 	}
 
-	if len(args) >= 2 {
+	if len(args) >= 2 && args[1] != nil {
 		orderClause = args[1].(*OrderField)
+	} else {
+		orderClause = &OrderField{
+			Field: "Id",
+			Order: ASC,
+		}
 	}
 
 	if whereClause == nil && orderClause == nil {

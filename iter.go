@@ -157,9 +157,31 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		return ri.iter.Next()
 	}
 
+	var whereObjValue reflect.Value
+	var whereValueType reflect.Type
+
+	// when Where=LIKE and we want to compare non string values,
+	// run a SeekPrefix ONCE and remove the whereClause for future use
+	if ri.whereClause != nil && ri.whereClause.Condition == Like {
+		obj := reflect.ValueOf(val)
+		obj = reflect.Indirect(obj)
+		whereObjValue = obj.FieldByName(ri.whereClause.Field)
+		if !whereObjValue.IsValid() {
+			return ri.Next(val)
+		}
+
+		whereValueType = reflect.TypeOf(whereObjValue.Interface())
+
+		if whereValueType.Kind() != reflect.String {
+			ri.iter.SeekPrefix(ri.whereClause.Value)
+			ri.whereClause = nil
+			return ri.Next(val)
+		}
+	}
+
 	if ri.tableRoot != nil {
 		if len(ri.entries) == 0 {
-			_, value, ok := nextIter() //ri.iter.Next()
+			_, value, ok := nextIter()
 			if !ok {
 				return false
 			}
@@ -184,7 +206,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 		ri.db.decode(*value, val)
 	} else {
-		_, value, ok := nextIter() //ri.iter.Next()
+		_, value, ok := nextIter()
 		if !ok {
 			return false
 		}
@@ -192,17 +214,25 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 	}
 
 	if ri.whereClause != nil {
-		obj := reflect.ValueOf(val)
-		obj = reflect.Indirect(obj)
+		if !whereObjValue.IsValid() || whereValueType == nil {
+			obj := reflect.ValueOf(val)
+			obj = reflect.Indirect(obj)
 
-		v := obj.FieldByName(ri.whereClause.Field)
-		if !v.IsValid() {
-			return true
+			whereObjValue = obj.FieldByName(ri.whereClause.Field)
+			if !whereObjValue.IsValid() {
+				return ri.Next(val)
+			}
+
+			whereValueType = reflect.TypeOf(whereObjValue.Interface())
 		}
 
-		whereInputType := reflect.TypeOf(v.Interface())
-		whereInput := toGoType(whereInputType.Kind(), ri.whereClause.Value)
-		whereInputV := reflect.ValueOf(whereInput)
+		whereValue := toGoType(whereValueType.Kind(), ri.whereClause.Value)
+		whereValueR := reflect.ValueOf(whereValue)
+
+		// handle edge case, where an empty Id field is set
+		if whereValueType.Kind() == reflect.Slice && whereObjValue.Len() == 0 && whereValue == nil {
+			return true
+		}
 
 		var fn ComparisonFunction
 
@@ -220,8 +250,8 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		case LargerOrEqual:
 			fn = ge
 		case Like:
-			if whereInputType.Kind() == reflect.String {
-				if !strings.Contains(v.Interface().(string), whereInputV.Interface().(string)) {
+			if whereValueType.Kind() == reflect.String {
+				if !strings.Contains(whereObjValue.Interface().(string), whereValueR.Interface().(string)) {
 					return ri.Next(val)
 				}
 			}
@@ -230,7 +260,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		// NOTE: fn == nil, return false
 
 		if fn != nil {
-			if ok, _ := fn(v, whereInputV); !ok {
+			if ok, _ := fn(whereObjValue, whereValueR); !ok {
 				return ri.Next(val)
 			}
 		}
