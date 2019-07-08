@@ -452,7 +452,7 @@ func Test_Tables(t *testing.T) {
 		fmt.Printf("%d %s %s\n", p2.Id, p2.Name, p2.Phone)
 	}
 
-	whereClause := txn.WhereParser([]byte(`Id = 2`))
+	whereClause, _ := txn.WhereParser([]byte(`Id = 2`))
 	iter, err = txn.Select("PhoneBook", whereClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -468,8 +468,8 @@ func Test_Tables(t *testing.T) {
 	}
 
 	// Search with secondary index
-	whereClause = txn.WhereParser([]byte(`Phone = "555-2222"`))
-	orderClause := txn.OrderParser([]byte("Phone"))
+	whereClause, _ = txn.WhereParser([]byte(`Phone = "555-2222"`))
+	orderClause, _ := txn.OrderParser([]byte("Phone"))
 	iter, err = txn.Select("PhoneBook", whereClause, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -554,18 +554,27 @@ func Test_TableWhereParser(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	query := txn.WhereParser([]byte(""))
-	if query != nil {
+	query, err := txn.WhereParser([]byte(""))
+	if query != nil || err != nil {
 		t.Fatal("Wrong where query", query)
 	}
 
+	query, err = txn.WhereParser([]byte("Name"))
+	if query != nil || err == nil {
+		t.Fatal("Wrong where query", query, err)
+	}
 
-	query = txn.WhereParser([]byte("Name = Harry"))
+	query, err = txn.WhereParser([]byte("Name LIKE"))
+	if query != nil || err == nil {
+		t.Fatal("Wrong where query", query, err)
+	}
+
+	query, _ = txn.WhereParser([]byte("Name = Harry"))
 	if query.Condition != Equal {
 		t.Fatal("Wrong where query", query)
 	}
 
-	query = txn.WhereParser([]byte("Name <= Harry"))
+	query, _ = txn.WhereParser([]byte("Name <= Harry"))
 	if query.Condition != SmallerOrEqual {
 		t.Fatal("Wrong where query", query)
 	}
@@ -580,12 +589,12 @@ func Test_TableOrderParser(t *testing.T) {
 
 	txn := db.GetRootSnapshot()
 
-	query := txn.OrderParser([]byte("Name"))
+	query, _ := txn.OrderParser([]byte("Name"))
 	if query.Order != ASC {
 		t.Fatal("Wrong order query", query)
 	}
 
-	query = txn.OrderParser([]byte("Name DESC"))
+	query, _ = txn.OrderParser([]byte("Name DESC"))
 	if query.Order != DESC {
 		t.Fatal("Wrong order query", query)
 	}
@@ -639,9 +648,9 @@ func Test_TablesSelect(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	// whereClause := txn.WhereParser([]byte(`Id >= 1`))
-	whereClause := txn.WhereParser([]byte(`Phone LIKE "555-1"`))
-	orderClause := txn.OrderParser([]byte("Phone DESC"))
+	// whereClause, _ := txn.WhereParser([]byte(`Id >= 1`))
+	whereClause, _ := txn.WhereParser([]byte(`Phone LIKE "555-1"`))
+	orderClause, _ := txn.OrderParser([]byte("Phone DESC"))
 
 	iter, err := txn.Select("PhoneBook", whereClause, orderClause)
 	if err != nil {
@@ -699,7 +708,7 @@ func Test_TableOrdering(t *testing.T) {
 
 	where := []byte(`Id LIKE `)
 	whereVal := [4]byte{1, 2, 3, 4}
-	whereClause := snap.WhereParser(append(where, whereVal[:]...))
+	whereClause, _ := snap.WhereParser(append(where, whereVal[:]...))
 
 	iter, err := snap.Select(WitnessesTable, whereClause)
 	if err != nil {
@@ -734,7 +743,7 @@ func Test_TableOrdering(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	orderClause := snap.OrderParser([]byte("Stake DESC"))
+	orderClause, _ := snap.OrderParser([]byte("Stake DESC"))
 	iter, err = snap.Select(WitnessesTable, nil, orderClause)
 
 	lastStake := uint64(3000)
@@ -777,8 +786,8 @@ func Test_TableDuplicates(t *testing.T) {
 
 	where := []byte(`Id LIKE `)
 	whereVal := [4]byte{1, 2, 3, 4}
-	whereClause := snap.WhereParser(append(where, whereVal[:]...))
-	orderClause := snap.OrderParser([]byte("Id"))
+	whereClause, _ := snap.WhereParser(append(where, whereVal[:]...))
+	orderClause, _ := snap.OrderParser([]byte("Id"))
 
 	iter, err := snap.Select(WitnessesTable, whereClause, orderClause)
 	if err != nil {
@@ -802,7 +811,7 @@ func Test_TableDuplicates(t *testing.T) {
 		t.Fatal("Failed to update row error:", err)
 	}
 
-	orderClause = snap.OrderParser([]byte("Stake"))
+	orderClause, _ = snap.OrderParser([]byte("Stake"))
 	iter, err = snap.Select(WitnessesTable, nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -919,7 +928,7 @@ func Test_TablesDeleteIndexes(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	orderClause := snap.OrderParser([]byte("Stake"))
+	orderClause, _ := snap.OrderParser([]byte("Stake"))
 	iter, err := snap.Select(WitnessesTable, nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1000,7 +1009,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 		t.Fatal("Failed to update row error:", err)
 	}
 
-	orderClause := txn.OrderParser([]byte("Phone"))
+	orderClause, _ := txn.OrderParser([]byte("Phone"))
 	iter, err := txn.Select("PhoneBook", nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1048,7 +1057,7 @@ func Test_TablesInsertIndexesWithSameValue(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	orderClause := snap.OrderParser([]byte("Stake"))
+	orderClause, _ := snap.OrderParser([]byte("Stake"))
 	iter, err := snap.Select(WitnessesTable, nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1121,7 +1130,7 @@ func Test_TablesSelectReturnsWrongRows(t *testing.T) {
 	fmt.Println("------ Select 0 for p2d")
 
 	where := []byte(`Id LIKE `)
-	whereClause := snap.WhereParser(append(where, p2d1[:1]...)) /* 20 */
+	whereClause, _ := snap.WhereParser(append(where, p2d1[:1]...)) /* 20 */
 	fmt.Println(whereClause)
 	iter, err := snap.Select(DelegationsTable, whereClause)
 	if err != nil {
@@ -1346,7 +1355,7 @@ func Test_InsertLookupPrefixAfterMergeOnParentTableNodeForEmptyIdValue(t *testin
 	var d Delegation
 
 	where := []byte(`Id LIKE `)
-	whereClause := snap.WhereParser(append(where, p2[:]...))
+	whereClause, _ := snap.WhereParser(append(where, p2[:]...))
 	iter, err := snap.Select(DelegationsTable, whereClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1512,7 +1521,7 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 		t.Fatal("Failed to delete row error:", err)
 	}
 
-	orderClause := snap.OrderParser([]byte("Stake"))
+	orderClause, _ := snap.OrderParser([]byte("Stake"))
 	iter, err := snap.Select(WitnessesTable, nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1574,7 +1583,7 @@ func Test_TablesUpdateIndexesWithSameValue(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	orderClause := snap.OrderParser([]byte("Stake"))
+	orderClause, _ := snap.OrderParser([]byte("Stake"))
 	iter, err := snap.Select(WitnessesTable, nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator error:", err)
@@ -1693,7 +1702,7 @@ func Test_SnapshotResetTo(t *testing.T) {
 
 	txn3 := db.GetRootSnapshot()
 
-	orderClause := txn3.OrderParser([]byte("Phone"))
+	orderClause, _ := txn3.OrderParser([]byte("Phone"))
 	iter, err = txn3.Select("PhoneBook", nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator")
@@ -1801,7 +1810,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 
 	snapForResetTo := txn.Snapshot()
 
-	orderClause := txn.OrderParser([]byte("Phone"))
+	orderClause, _ := txn.OrderParser([]byte("Phone"))
 	iter, err := txn.Select("PhoneBook", nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator")
@@ -1841,7 +1850,7 @@ func Test_SnapshotResetToSelectIndexNoEntries(t *testing.T) {
 	//
 	// Test return row with index sort
 	//
-	orderClause = snapForResetTo.OrderParser([]byte("Phone"))
+	orderClause, _ = snapForResetTo.OrderParser([]byte("Phone"))
 	iter, err = snapForResetTo.Select("PhoneBook", nil, orderClause)
 	if err != nil {
 		t.Fatal("Failed to create iterator")

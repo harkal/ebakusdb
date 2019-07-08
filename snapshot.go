@@ -870,12 +870,16 @@ type WhereField struct {
 	Value     []byte
 }
 
-func (s *Snapshot) WhereParser(input []byte) *WhereField {
+func (s *Snapshot) WhereParser(input []byte) (*WhereField, error) {
 	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "!=", "LIKE"})
 	parts := tokenizer.Tokenize(input)
 
 	if len(parts) == 0 {
-		return nil
+		return nil, nil
+	}
+
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("malformed where query")
 	}
 
 	var condition WhereCondition
@@ -906,7 +910,7 @@ func (s *Snapshot) WhereParser(input []byte) *WhereField {
 		Field:     string(parts[0]),
 		Condition: condition,
 		Value:     val,
-	}
+	}, nil
 }
 
 type OrderCondition int
@@ -921,12 +925,16 @@ type OrderField struct {
 	Order OrderCondition
 }
 
-func (s *Snapshot) OrderParser(input []byte) *OrderField {
+func (s *Snapshot) OrderParser(input []byte) (*OrderField, error) {
 	tokenizer := NewTokenizer([]string{"ASC", "DESC"})
 	parts := tokenizer.Tokenize(input)
 
 	if len(parts) == 0 {
-		return nil
+		return nil, nil
+	}
+
+	if len(parts) < 1 {
+		return nil, fmt.Errorf("malformed order query")
 	}
 
 	order := ASC
@@ -937,7 +945,7 @@ func (s *Snapshot) OrderParser(input []byte) *OrderField {
 	return &OrderField{
 		Field: string(parts[0]),
 		Order: order,
-	}
+	}, nil
 }
 
 func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, error) {
