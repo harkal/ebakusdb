@@ -238,34 +238,3 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 
 	return true
 }
-
-func (ri *ResultIterator) Prev(val interface{}) bool {
-	if ri.tableRoot != nil {
-		if len(ri.entries) == 0 {
-			_, value, ok := ri.iter.Prev()
-			if !ok {
-				return ok
-			}
-			ri.db.decode(value, &ri.entries)
-			return ri.Prev(val)
-		}
-
-		ik := ri.entries[len(ri.entries)-1]
-		ri.entries = ri.entries[:len(ri.entries)-1]
-
-		ik = encodeKey(ik)
-		value, ok := ri.tableRoot.Get(ri.db, ik)
-		if !ok {
-			return false
-		}
-		ri.db.decode(*value, val)
-	} else {
-		_, value, ok := ri.iter.Prev()
-		if !ok {
-			return false
-		}
-		ri.db.decode(value, val)
-	}
-
-	return true
-}
