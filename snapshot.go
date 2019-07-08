@@ -185,13 +185,15 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 		}
 	}
 
-	tlb := Table{
+	tbl := Table{
 		Node:    *nPtr,
 		Indexes: make([]string, 0),
 		Schema:  schema,
 	}
 
-	v, _ := s.db.encode(tlb)
+	tbl.Indexes = append(tbl.Indexes, "Id")
+
+	v, _ := s.db.encode(tbl)
 	s.Insert(getTableKey(table), v)
 	return nil
 }
@@ -750,7 +752,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		defer oldVal.Release(mm)
 	}
 	var oldV reflect.Value
-	if len(tbl.Indexes) > 0 {
+	if len(tbl.Indexes) > 1 {
 		if oldVal == nil {
 			return fmt.Errorf("Old value not found")
 		}
