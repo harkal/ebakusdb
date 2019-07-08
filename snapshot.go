@@ -959,8 +959,16 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}
 
 	if len(args) >= 2 && args[1] != nil {
-		orderClause = args[1].(*OrderField)
-	} else {
+		tempOrderClause := args[1].(*OrderField)
+		for _, indexField := range tbl.Indexes {
+			if tempOrderClause.Field == indexField {
+				orderClause = tempOrderClause
+				break
+			}
+		}
+	}
+
+	if orderClause == nil {
 		orderClause = &OrderField{
 			Field: "Id",
 			Order: ASC,
@@ -974,11 +982,6 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		if orderClause.Field == "Id" {
 			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
 
-			// if whereClause != nil && whereClause.Condition == Like {
-			// 	iter.SeekPrefix(whereClause.Value)
-			// 	whereClause = nil
-			// }
-
 		} else {
 			ifield := IndexField{Table: table, Field: orderClause.Field}
 			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
@@ -989,11 +992,6 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 			s.db.decode(*tPtrMarshaled, &tPtr)
 			iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
 
-			// if whereClause != nil && whereClause.Condition == Like {
-			// 	iter.SeekPrefix(whereClause.Value)
-			// 	whereClause = nil
-			// }
-
 			tblNode = tbl.Node.getNode(s.db.allocator)
 		}
 	}
@@ -1003,7 +1001,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		iter:        iter,
 		tableRoot:   tblNode,
 		whereClause: whereClause,
-		ordering:    orderClause.Order,
+		orderClause: orderClause,
 	}, nil
 }
 

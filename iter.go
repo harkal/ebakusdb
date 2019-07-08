@@ -146,12 +146,12 @@ type ResultIterator struct {
 	tableRoot *Node
 
 	whereClause *WhereField
-	ordering    OrderCondition
+	orderClause *OrderField
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
 	nextIter := func() ([]byte, []byte, bool) {
-		if ri.ordering == DESC {
+		if ri.orderClause.Order == DESC {
 			return ri.iter.Prev()
 		}
 		return ri.iter.Next()
@@ -162,7 +162,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 
 	// when Where=LIKE and we want to compare non string values,
 	// run a SeekPrefix ONCE and remove the whereClause for future use
-	if ri.whereClause != nil && ri.whereClause.Condition == Like {
+	if ri.whereClause != nil && ri.whereClause.Condition == Like && ri.whereClause.Field == ri.orderClause.Field {
 		obj := reflect.ValueOf(val)
 		obj = reflect.Indirect(obj)
 		whereObjValue = obj.FieldByName(ri.whereClause.Field)
@@ -190,7 +190,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 
 		var ik []byte
-		if ri.ordering == DESC {
+		if ri.orderClause.Order == DESC {
 			ik = ri.entries[len(ri.entries)-1]
 			ri.entries = ri.entries[:len(ri.entries)-1]
 
