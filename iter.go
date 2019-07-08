@@ -2,6 +2,8 @@ package ebakusdb
 
 import (
 	"bytes"
+	"reflect"
+	"strings"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
@@ -146,7 +148,6 @@ type ResultIterator struct {
 	whereClause *WhereField
 	ordering    OrderCondition
 }
-}
 
 func (ri *ResultIterator) Next(val interface{}) bool {
 	nextIter := func() ([]byte, []byte, bool) {
@@ -156,13 +157,6 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		return ri.iter.Next()
 	}
 
-	next := func(val interface{}) bool {
-		if ri.ordering == DESC {
-			return ri.Prev(val)
-		}
-		return ri.Next(val)
-	}
-
 	if ri.tableRoot != nil {
 		if len(ri.entries) == 0 {
 			_, value, ok := nextIter() //ri.iter.Next()
@@ -170,7 +164,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 				return false
 			}
 			ri.db.decode(value, &ri.entries)
-			return next(val) //ri.Next(val)
+			return ri.Next(val)
 		}
 
 		var ik []byte
@@ -207,36 +201,37 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 
 		whereInputType := reflect.TypeOf(v.Interface())
-		fmt.Println(whereInputType)
-		whereInput := reflect.New(whereInputType)
-		whereInputI := whereInput.Elem().Interface()
-		// fmt.Println(whereInput)
-		// whereI := reflect.ValueOf(whereInputI)
-		// whereI = reflect.Indirect(whereI)
+		whereInput := toGoType(whereInputType.Kind(), ri.whereClause.Value)
+		whereInputV := reflect.ValueOf(whereInput)
 
-		var err error
-		// if whereInputType.Name() == "string" {
-		// 	err = json.Unmarshal([]byte(strconv.Quote(string(ri.whereClause.Value))), &whereInputI)
-		// } else {
-		// err := Set(whereInput, strconv.Quote(ri.whereClause.Value))
-		err = json.Unmarshal(ri.whereClause.Value, &whereInputI)
-		// }
-		fmt.Println('-', whereInputI, err, ri.whereClause.Value)
-
-		fmt.Println(whereInputI, &whereInputI)
-		fmt.Println(v.Interface(), whereInputI)
-		fmt.Println("=", v.Interface().(uint64))
-
-		// whereInputI := reflect.ValueOf(whereInputI)
+		var fn ComparisonFunction
 
 		switch ri.whereClause.Condition {
 		case Equal:
-			if v.Interface() != whereInputI {
-				return next(val)
-			}
+			fn = eq
+		case NotEqual:
+			fn = ne
+		case Smaller:
+			fn = lt
+		case SmallerOrEqual:
+			fn = le
+		case Larger:
+			fn = gt
 		case LargerOrEqual:
-			if ok, _ := ge(v, whereInput); !ok {
-				return next(val)
+			fn = ge
+		case Like:
+			if whereInputType.Kind() == reflect.String {
+				if !strings.Contains(v.Interface().(string), whereInputV.Interface().(string)) {
+					return ri.Next(val)
+				}
+			}
+		}
+
+		// NOTE: fn == nil, return false
+
+		if fn != nil {
+			if ok, _ := fn(v, whereInputV); !ok {
+				return ri.Next(val)
 			}
 		}
 	}

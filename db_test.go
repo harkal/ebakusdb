@@ -636,23 +636,24 @@ func Test_TablesSelect(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	iter, err := txn.Select("PhoneBook", "Name LIKE Harry", "Phone ASC")
+	// where := txn.WhereParser([]byte(`Id >= 1`))
+	where := txn.WhereParser([]byte(`Phone LIKE "555-1"`))
+	order := txn.OrderParser([]byte("Phone DESC"))
+
+	iter, err := txn.Select2("PhoneBook", where, order)
 	if err != nil {
 		t.Fatal("Failed to create iterator")
 	}
 
 	var p Phone
-	for iter.Next(&p) {
-		fmt.Printf("%d %s %s\n", p.Id, p.Name, p.Phone)
-	}
 
 	found := iter.Next(&p)
-	if !found || p.Id != 1 {
+	if !found || p.Id != 2 {
 		t.Fatal("Returned wrong row", &p, found)
 	}
 
 	found = iter.Next(&p)
-	if !found || p.Id != 0 {
+	if !found || p.Id != 1 {
 		t.Fatal("Returned wrong row", &p, found)
 	}
 

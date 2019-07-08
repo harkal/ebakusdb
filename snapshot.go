@@ -856,6 +856,7 @@ type WhereCondition int
 
 const (
 	Equal WhereCondition = iota
+	NotEqual
 	Smaller
 	SmallerOrEqual
 	Larger
@@ -870,7 +871,7 @@ type WhereField struct {
 }
 
 func (s *Snapshot) WhereParser(input []byte) *WhereField {
-	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "LIKE"})
+	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "!=", "LIKE"})
 	parts := tokenizer.Tokenize(input)
 
 	if len(parts) == 0 {
@@ -882,6 +883,8 @@ func (s *Snapshot) WhereParser(input []byte) *WhereField {
 	switch string(parts[1]) {
 	case "=", "==":
 		condition = Equal
+	case "!=":
+		condition = NotEqual
 	case "<":
 		condition = Smaller
 	case "<=":
@@ -922,7 +925,6 @@ func (s *Snapshot) OrderParser(input []byte) *OrderField {
 	}
 
 	order := ASC
-
 	if len(parts) == 2 && string(parts[1]) == "DESC" {
 		order = DESC
 	}
