@@ -999,7 +999,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}, nil
 }
 
-func (s *Snapshot) Select2(table string, whereClause *WhereField, orderObj *OrderField) (*ResultIterator, error) {
+func (s *Snapshot) Select2(table string, args ...interface{}) (*ResultIterator, error) {
 	tPtrMarshaled, found := s.Get(getTableKey(table))
 	if found == false {
 		return nil, fmt.Errorf("Unknown table")
@@ -1010,61 +1010,31 @@ func (s *Snapshot) Select2(table string, whereClause *WhereField, orderObj *Orde
 	var iter *Iterator
 	var tblNode *Node
 
-	if whereClause == nil && orderObj == nil {
+	var whereClause *WhereField
+	var orderClause *OrderField
+
+	if len(args) >= 1 {
+		whereClause = args[0].(*WhereField)
+	}
+
+	if len(args) >= 2 {
+		orderClause = args[1].(*OrderField)
+	}
+
+	if whereClause == nil && orderClause == nil {
 		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
+
 	} else {
-
-		var indexField string
-		var prefix []byte
-
-		if orderObj != nil {
-			indexField = orderObj.Field
-		}
-
-		if whereClause != nil {
-			// obj, err := getTableStructInstance(&tbl)
-			// if err != nil {
-			// 	return err
-			// }
-
-			// v = reflect.ValueOf(obj)
-
-			// val := s.Get(...)
-			// bytes := val.getBytes(mm)
-			// s.db.decode(bytes, obj)
-			// v = reflect.Indirect(v)
-			// ----
-
-			// obj, err := getTableStructInstance(&tbl)
-			// if err != nil {
-			// 	return nil, err
-			// }
-
-			// schema := reflect.ValueOf(obj)
-			// schema = reflect.Indirect(schema)
-
-			// schema.FieldByName(where.Field).SetBytes(where.Value)
-
-			// for i := 0; i < schema.NumField(); i++ {
-			// 	varName := schema.Type().Field(i).Name
-			// 	varType := schema.Type().Field(i).Type
-			// 	varValue := schema.Field(i).Interface()
-			// 	fmt.Printf("%v %v %v\n", varName, varType, varValue)
-			// }
-
-			prefix = whereClause.Value
-			fmt.Println("====")
-			fmt.Println(prefix)
-		}
-
-		if indexField == "Id" {
+		if orderClause.Field == "Id" {
 			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-			if whereClause != nil {
-				// iter.SeekPrefix(prefix)
-				// iter.Where(whereClause)
-			}
+
+			// if whereClause != nil && whereClause.Condition == Like {
+			// 	iter.SeekPrefix(whereClause.Value)
+			// 	whereClause = nil
+			// }
+
 		} else {
-			ifield := IndexField{Table: table, Field: indexField}
+			ifield := IndexField{Table: table, Field: orderClause.Field}
 			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
 			if found == false {
 				return nil, fmt.Errorf("Unknown index")
@@ -1073,10 +1043,10 @@ func (s *Snapshot) Select2(table string, whereClause *WhereField, orderObj *Orde
 			s.db.decode(*tPtrMarshaled, &tPtr)
 			iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
 
-			if whereClause != nil {
-				// iter.SeekPrefix(prefix)
-				// iter.Where(whereClause)
-			}
+			// if whereClause != nil && whereClause.Condition == Like {
+			// 	iter.SeekPrefix(whereClause.Value)
+			// 	whereClause = nil
+			// }
 
 			tblNode = tbl.Node.getNode(s.db.allocator)
 		}
@@ -1087,7 +1057,7 @@ func (s *Snapshot) Select2(table string, whereClause *WhereField, orderObj *Orde
 		iter:        iter,
 		tableRoot:   tblNode,
 		whereClause: whereClause,
-		ordering:    orderObj.Order,
+		ordering:    orderClause.Order,
 	}, nil
 }
 
