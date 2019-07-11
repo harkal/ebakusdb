@@ -2,6 +2,8 @@ package ebakusdb
 
 import (
 	"bytes"
+	"reflect"
+	"strings"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
@@ -142,12 +144,44 @@ type ResultIterator struct {
 	entries [][]byte
 
 	tableRoot *Node
+
+	whereClause *WhereField
+	orderClause *OrderField
 }
 
 func (ri *ResultIterator) Next(val interface{}) bool {
+	nextIter := func() ([]byte, []byte, bool) {
+		if ri.orderClause.Order == DESC {
+			return ri.iter.Prev()
+		}
+		return ri.iter.Next()
+	}
+
+	var whereObjValue reflect.Value
+	var whereValueType reflect.Type
+
+	// when Where=LIKE and we want to compare non string values,
+	// run a SeekPrefix ONCE and remove the whereClause for future use
+	if ri.whereClause != nil && ri.whereClause.Condition == Like && ri.whereClause.Field == ri.orderClause.Field {
+		obj := reflect.ValueOf(val)
+		obj = reflect.Indirect(obj)
+		whereObjValue = obj.FieldByName(ri.whereClause.Field)
+		if !whereObjValue.IsValid() {
+			return ri.Next(val)
+		}
+
+		whereValueType = reflect.TypeOf(whereObjValue.Interface())
+
+		if whereValueType.Kind() != reflect.String {
+			ri.iter.SeekPrefix(ri.whereClause.Value)
+			ri.whereClause = nil
+			return ri.Next(val)
+		}
+	}
+
 	if ri.tableRoot != nil {
 		if len(ri.entries) == 0 {
-			_, value, ok := ri.iter.Next()
+			_, value, ok := nextIter()
 			if !ok {
 				return false
 			}
@@ -155,8 +189,15 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			return ri.Next(val)
 		}
 
-		ik := ri.entries[0]
-		ri.entries = ri.entries[1:]
+		var ik []byte
+		if ri.orderClause.Order == DESC {
+			ik = ri.entries[len(ri.entries)-1]
+			ri.entries = ri.entries[:len(ri.entries)-1]
+
+		} else {
+			ik = ri.entries[0]
+			ri.entries = ri.entries[1:]
+		}
 
 		ik = encodeKey(ik)
 		value, ok := ri.tableRoot.Get(ri.db, ik)
@@ -165,42 +206,79 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 		ri.db.decode(*value, val)
 	} else {
-		_, value, ok := ri.iter.Next()
+		_, value, ok := nextIter()
 		if !ok {
 			return false
 		}
 		ri.db.decode(value, val)
 	}
 
-	return true
-}
+	if ri.whereClause != nil {
+		if !whereObjValue.IsValid() || whereValueType == nil {
+			obj := reflect.ValueOf(val)
+			obj = reflect.Indirect(obj)
 
-func (ri *ResultIterator) Prev(val interface{}) bool {
-	if ri.tableRoot != nil {
-		if len(ri.entries) == 0 {
-			_, value, ok := ri.iter.Prev()
-			if !ok {
-				return ok
+			whereObjValue = obj.FieldByName(ri.whereClause.Field)
+			if !whereObjValue.IsValid() {
+				return ri.Next(val)
 			}
-			ri.db.decode(value, &ri.entries)
-			return ri.Prev(val)
+
+			whereValueType = reflect.TypeOf(whereObjValue.Interface())
 		}
 
-		ik := ri.entries[len(ri.entries)-1]
-		ri.entries = ri.entries[:len(ri.entries)-1]
+		whereValue, err := toGoType(whereValueType.Kind(), ri.whereClause.Value)
+		if err != nil {
+			return false
+		}
+		whereValueR := reflect.ValueOf(whereValue)
 
-		ik = encodeKey(ik)
-		value, ok := ri.tableRoot.Get(ri.db, ik)
-		if !ok {
-			return false
+		// handle edge case, where an empty Id field is set
+		if whereValueType.Kind() == reflect.Slice && whereObjValue.Len() == 0 && whereValue == nil {
+			return true
 		}
-		ri.db.decode(*value, val)
-	} else {
-		_, value, ok := ri.iter.Prev()
-		if !ok {
-			return false
+
+		var fn ComparisonFunction
+
+		switch ri.whereClause.Condition {
+		case Equal:
+			fn = eq
+		case NotEqual:
+			fn = ne
+		case Smaller:
+			fn = lt
+		case SmallerOrEqual:
+			fn = le
+		case Larger:
+			fn = gt
+		case LargerOrEqual:
+			fn = ge
+		case Like:
+			if whereValueType.Kind() == reflect.String {
+				if !strings.Contains(whereObjValue.Interface().(string), whereValueR.Interface().(string)) {
+					return ri.Next(val)
+				}
+			} else if whereValueType.Kind() == reflect.Slice || whereValueType.Kind() == reflect.Array {
+				whereObjLength := whereObjValue.Len()
+				whereValueLength := whereValueR.Len()
+				for i := 0; i < whereObjLength; i++ {
+					if whereObjLength-i < whereValueLength {
+						break
+					} else if reflect.DeepEqual(whereObjValue.Slice(i, whereValueLength+i).Interface(), whereValueR.Interface()) {
+						return true
+					}
+				}
+
+				return ri.Next(val)
+			}
 		}
-		ri.db.decode(value, val)
+
+		// NOTE: fn == nil, return false
+
+		if fn != nil {
+			if ok, _ := fn(whereObjValue, whereValueR); !ok {
+				return ri.Next(val)
+			}
+		}
 	}
 
 	return true

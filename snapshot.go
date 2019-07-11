@@ -61,7 +61,7 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 	}
 }
 
-func getTableInstance(tbl *Table) (interface{}, error) {
+func getTableStructInstance(tbl *Table) (interface{}, error) {
 	fields := strings.Split(tbl.Schema, ",")
 
 	if len(fields) < 1 {
@@ -185,13 +185,15 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 		}
 	}
 
-	tlb := Table{
+	tbl := Table{
 		Node:    *nPtr,
 		Indexes: make([]string, 0),
 		Schema:  schema,
 	}
 
-	v, _ := s.db.encode(tlb)
+	tbl.Indexes = append(tbl.Indexes, "Id")
+
+	v, _ := s.db.encode(tbl)
 	s.Insert(getTableKey(table), v)
 	return nil
 }
@@ -750,12 +752,12 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		defer oldVal.Release(mm)
 	}
 	var oldV reflect.Value
-	if len(tbl.Indexes) > 0 {
+	if len(tbl.Indexes) > 1 {
 		if oldVal == nil {
 			return fmt.Errorf("Old value not found")
 		}
 
-		obj, err := getTableInstance(&tbl)
+		obj, err := getTableStructInstance(&tbl)
 		if err != nil {
 			return err
 		}
@@ -852,6 +854,102 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	return nil
 }
 
+type WhereCondition int
+
+const (
+	Equal WhereCondition = iota
+	NotEqual
+	Smaller
+	SmallerOrEqual
+	Larger
+	LargerOrEqual
+	Like
+)
+
+type WhereField struct {
+	Field     string
+	Condition WhereCondition
+	Value     []byte
+}
+
+func (s *Snapshot) WhereParser(input []byte) (*WhereField, error) {
+	tokenizer := NewTokenizer([]string{"<", ">", "=", "==", "<=", ">=", "!=", "LIKE"})
+	parts := tokenizer.Tokenize(input)
+
+	if len(parts) == 0 {
+		return nil, nil
+	}
+
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("malformed where query")
+	}
+
+	var condition WhereCondition
+
+	switch string(parts[1]) {
+	case "=", "==":
+		condition = Equal
+	case "!=":
+		condition = NotEqual
+	case "<":
+		condition = Smaller
+	case "<=":
+		condition = SmallerOrEqual
+	case ">":
+		condition = Larger
+	case ">=":
+		condition = LargerOrEqual
+	case "LIKE":
+		condition = Like
+	}
+
+	var val []byte
+	if len(parts) >= 3 {
+		val = parts[2]
+	}
+
+	return &WhereField{
+		Field:     string(parts[0]),
+		Condition: condition,
+		Value:     val,
+	}, nil
+}
+
+type OrderCondition int
+
+const (
+	ASC OrderCondition = iota
+	DESC
+)
+
+type OrderField struct {
+	Field string
+	Order OrderCondition
+}
+
+func (s *Snapshot) OrderParser(input []byte) (*OrderField, error) {
+	tokenizer := NewTokenizer([]string{"ASC", "DESC"})
+	parts := tokenizer.Tokenize(input)
+
+	if len(parts) == 0 {
+		return nil, nil
+	}
+
+	if len(parts) < 1 {
+		return nil, fmt.Errorf("malformed order query")
+	}
+
+	order := ASC
+	if len(parts) == 2 && string(parts[1]) == "DESC" {
+		order = DESC
+	}
+
+	return &OrderField{
+		Field: string(parts[0]),
+		Order: order,
+	}, nil
+}
+
 func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, error) {
 	tPtrMarshaled, found := s.Get(getTableKey(table))
 	if found == false {
@@ -863,32 +961,39 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	var iter *Iterator
 	var tblNode *Node
 
-	if len(args) == 0 {
-		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-	} else if len(args) > 0 {
-		indexField, ok := args[0].(string)
-		if !ok {
-			return nil, fmt.Errorf("Field names should be strings")
-		}
+	var whereClause *WhereField
+	var orderClause *OrderField
 
-		var v reflect.Value
-		if len(args) >= 2 {
-			indexValue := args[1]
-			v = reflect.ValueOf(indexValue)
-			v = reflect.Indirect(v)
-		}
+	if len(args) >= 1 && args[0] != nil {
+		whereClause = args[0].(*WhereField)
+	}
 
-		if indexField == "Id" {
-			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-			if len(args) >= 2 {
-				prefix, err := getEncodedIndexKey(v)
-				if err != nil {
-					return nil, err
-				}
-				iter.SeekPrefix(prefix)
+	if len(args) >= 2 && args[1] != nil {
+		tempOrderClause := args[1].(*OrderField)
+		for _, indexField := range tbl.Indexes {
+			if tempOrderClause.Field == indexField {
+				orderClause = tempOrderClause
+				break
 			}
+		}
+	}
+
+	if orderClause == nil {
+		orderClause = &OrderField{
+			Field: "Id",
+			Order: ASC,
+		}
+	}
+
+	if whereClause == nil && orderClause == nil {
+		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
+
+	} else {
+		if orderClause.Field == "Id" {
+			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
+
 		} else {
-			ifield := IndexField{Table: table, Field: indexField}
+			ifield := IndexField{Table: table, Field: orderClause.Field}
 			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
 			if found == false {
 				return nil, fmt.Errorf("Unknown index")
@@ -897,24 +1002,16 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 			s.db.decode(*tPtrMarshaled, &tPtr)
 			iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
 
-			if len(args) >= 2 {
-				prefix, err := getEncodedIndexKey(v)
-				if err != nil {
-					return nil, err
-				}
-				iter.SeekPrefix(prefix)
-			}
-
 			tblNode = tbl.Node.getNode(s.db.allocator)
 		}
-	} else {
-		return nil, fmt.Errorf("Bad query")
 	}
 
 	return &ResultIterator{
-		db:        s.db,
-		iter:      iter,
-		tableRoot: tblNode,
+		db:          s.db,
+		iter:        iter,
+		tableRoot:   tblNode,
+		whereClause: whereClause,
+		orderClause: orderClause,
 	}, nil
 }
 
