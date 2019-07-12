@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/hashicorp/golang-lru/simplelru"
 )
@@ -129,6 +130,10 @@ func getReflectTypeFromString(t string) (reflect.Type, error) {
 		return reflect.TypeOf(""), nil
 	}
 	return nil, fmt.Errorf("unsupported arg type: %s", t)
+}
+
+func isNilValue(i interface{}) bool {
+	return (*[2]uintptr)(unsafe.Pointer(&i))[1] == 0
 }
 
 type Snapshot struct {
@@ -964,11 +969,11 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	var whereClause *WhereField
 	var orderClause *OrderField
 
-	if len(args) >= 1 && args[0] != nil {
+	if len(args) >= 1 && !isNilValue(args[0]) {
 		whereClause = args[0].(*WhereField)
 	}
 
-	if len(args) >= 2 && args[1] != nil {
+	if len(args) >= 2 && !isNilValue(args[1]) {
 		tempOrderClause := args[1].(*OrderField)
 		for _, indexField := range tbl.Indexes {
 			if tempOrderClause.Field == indexField {
