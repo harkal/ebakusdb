@@ -226,14 +226,13 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			whereValueType = reflect.TypeOf(whereObjValue.Interface())
 		}
 
-		whereValue, err := toGoType(whereValueType.Kind(), ri.whereClause.Value)
+		whereValue, err := stringToReflectValue(string(ri.whereClause.Value), whereValueType)
 		if err != nil {
 			return false
 		}
-		whereValueR := reflect.ValueOf(whereValue)
 
 		// handle edge case, where an empty Id field is set
-		if whereValueType.Kind() == reflect.Slice && whereObjValue.Len() == 0 && whereValue == nil {
+		if whereValueType.Kind() == reflect.Slice && whereObjValue.Len() == 0 && whereValue.Interface() == nil {
 			return true
 		}
 
@@ -254,16 +253,16 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			fn = ge
 		case Like:
 			if whereValueType.Kind() == reflect.String {
-				if !strings.Contains(whereObjValue.Interface().(string), whereValueR.Interface().(string)) {
+				if !strings.Contains(whereObjValue.Interface().(string), whereValue.Interface().(string)) {
 					return ri.Next(val)
 				}
 			} else if whereValueType.Kind() == reflect.Slice || whereValueType.Kind() == reflect.Array {
 				whereObjLength := whereObjValue.Len()
-				whereValueLength := whereValueR.Len()
+				whereValueLength := whereValue.Len()
 				for i := 0; i < whereObjLength; i++ {
 					if whereObjLength-i < whereValueLength {
 						break
-					} else if reflect.DeepEqual(whereObjValue.Slice(i, whereValueLength+i).Interface(), whereValueR.Interface()) {
+					} else if reflect.DeepEqual(whereObjValue.Slice(i, whereValueLength+i).Interface(), whereValue.Interface()) {
 						return true
 					}
 				}
@@ -273,9 +272,8 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 
 		// NOTE: fn == nil, return false
-
 		if fn != nil {
-			if ok, _ := fn(whereObjValue, whereValueR); !ok {
+			if ok, _ := fn(whereObjValue, whereValue); !ok {
 				return ri.Next(val)
 			}
 		}

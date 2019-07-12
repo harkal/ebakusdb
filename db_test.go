@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"math/rand"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
@@ -468,7 +471,7 @@ func Test_Tables(t *testing.T) {
 	}
 
 	// Search with secondary index
-	whereClause, _ = txn.WhereParser([]byte(`Phone = "555-2222"`))
+	whereClause, _ = txn.WhereParser([]byte(`Phone = 555-2222`))
 	orderClause, _ := txn.OrderParser([]byte("Phone"))
 	iter, err = txn.Select("PhoneBook", whereClause, orderClause)
 	if err != nil {
@@ -611,6 +614,8 @@ func Test_TablesSelect(t *testing.T) {
 		Id    uint64
 		Name  string
 		Phone string
+		Addr  common.Address
+		Value *big.Int
 	}
 
 	txn := db.GetRootSnapshot()
@@ -628,6 +633,8 @@ func Test_TablesSelect(t *testing.T) {
 		Id:    0,
 		Name:  "Harry Kalogirou",
 		Phone: "555-2222",
+		Addr:  common.HexToAddress("0x4cCD53f11bE1604d90e9a1f08def5E8BcF65275D"),
+		Value: big.NewInt(2000000000000000000),
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
@@ -648,8 +655,14 @@ func Test_TablesSelect(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	// whereClause, _ := txn.WhereParser([]byte(`Id >= 1`))
-	whereClause, _ := txn.WhereParser([]byte(`Phone LIKE "555-1"`))
+	where := []byte(`Id >= 1`)
+	// where := []byte(`Id >= 0x01`)
+	// where := []byte(`Phone LIKE 555-1`)
+	// where := []byte(`Phone = 555-1111`)
+	// where := []byte(`Addr = 0x4cCD53f11bE1604d90e9a1f08def5E8BcF65275D`)
+	// where := []byte(`Value < 2000000000000000000`)
+	// where := []byte(`Value = 0x1BC16D674EC80000`)
+	whereClause, _ := txn.WhereParser(where)
 	orderClause, _ := txn.OrderParser([]byte("Phone DESC"))
 
 	iter, err := txn.Select("PhoneBook", whereClause, orderClause)

@@ -2,13 +2,11 @@ package ebakusdb
 
 import (
 	"errors"
+	"math/big"
 	"reflect"
 )
 
 // Comparison.
-
-// TODO: Perhaps allow comparison between signed and unsigned integers.
-
 var (
 	errBadComparisonType = errors.New("invalid type for comparison")
 	errBadComparison     = errors.New("incompatible types for comparison")
@@ -25,6 +23,9 @@ const (
 	floatKind
 	stringKind
 	uintKind
+	arrayKind
+	sliceKind
+	bigIntKind
 )
 
 type ComparisonFunction = func(arg1, arg2 reflect.Value) (bool, error)
@@ -44,6 +45,10 @@ func indirectInterface(v reflect.Value) reflect.Value {
 }
 
 func basicKind(v reflect.Value) (kind, error) {
+	if v.Kind() == reflect.Ptr && v.Type() == reflect.TypeOf(&big.Int{}) {
+		return bigIntKind, nil
+	}
+
 	switch v.Kind() {
 	case reflect.Bool:
 		return boolKind, nil
@@ -57,8 +62,19 @@ func basicKind(v reflect.Value) (kind, error) {
 		return complexKind, nil
 	case reflect.String:
 		return stringKind, nil
+	case reflect.Array:
+		return arrayKind, nil
+	case reflect.Slice:
+		return sliceKind, nil
 	}
 	return invalidKind, errBadComparisonType
+}
+
+func sliceToArray(s reflect.Value) reflect.Value {
+	t := reflect.ArrayOf(s.Len(), s.Type().Elem())
+	a := reflect.New(t).Elem()
+	reflect.Copy(a, s)
+	return a
 }
 
 // eq evaluates the comparison a == b
@@ -90,6 +106,8 @@ func eqM(arg1 reflect.Value, arg2 ...reflect.Value) (bool, error) {
 				truth = v1.Int() >= 0 && uint64(v1.Int()) == v2.Uint()
 			case k1 == uintKind && k2 == intKind:
 				truth = v2.Int() >= 0 && v1.Uint() == uint64(v2.Int())
+			case (k1 == arrayKind && k2 == sliceKind) || (k1 == sliceKind && k2 == arrayKind):
+				truth = reflect.DeepEqual(sliceToArray(v1).Interface(), sliceToArray(v2).Interface())
 			default:
 				return false, errBadComparison
 			}
@@ -107,6 +125,18 @@ func eqM(arg1 reflect.Value, arg2 ...reflect.Value) (bool, error) {
 				truth = v1.String() == v2.String()
 			case uintKind:
 				truth = v1.Uint() == v2.Uint()
+			case arrayKind, sliceKind:
+				truth = reflect.DeepEqual(v1, v2)
+			case bigIntKind:
+				v1Big := v1.Interface().(*big.Int)
+				v2Big := v2.Interface().(*big.Int)
+				if v1Big == nil {
+					v1Big = big.NewInt(0)
+				}
+				if v2Big == nil {
+					v2Big = big.NewInt(0)
+				}
+				truth = v1Big.Cmp(v2Big) == 0
 			default:
 				panic("invalid kind")
 			}
@@ -160,6 +190,16 @@ func lt(arg1, arg2 reflect.Value) (bool, error) {
 			truth = v1.String() < v2.String()
 		case uintKind:
 			truth = v1.Uint() < v2.Uint()
+		case bigIntKind:
+			v1Big := v1.Interface().(*big.Int)
+			v2Big := v2.Interface().(*big.Int)
+			if v1Big == nil {
+				v1Big = big.NewInt(0)
+			}
+			if v2Big == nil {
+				v2Big = big.NewInt(0)
+			}
+			truth = v1Big.Cmp(v2Big) < 0
 		default:
 			panic("invalid kind")
 		}
