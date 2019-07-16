@@ -34,6 +34,16 @@ func getTableKey(table string) []byte {
 func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 
 	switch v.Kind() {
+	case reflect.Uint8, reflect.Int8:
+		return []byte{v.Interface().(uint8)}, nil
+	case reflect.Uint16, reflect.Int16:
+		b := make([]byte, 2)
+		binary.BigEndian.PutUint16(b, uint16(v.Uint()))
+		return b, nil
+	case reflect.Uint32, reflect.Int32:
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint32(b, uint32(v.Uint()))
+		return b, nil
 	case reflect.Uint64, reflect.Int64:
 		b := make([]byte, 8)
 		binary.BigEndian.PutUint64(b, v.Uint())
