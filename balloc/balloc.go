@@ -136,6 +136,11 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	b.mux.Lock()
 
+	if b.header.dataWatermark+pagesNeeded*psize > b.bufferSize {
+		b.mux.Unlock()
+		return 0, ErrOutOfMemory
+	}
+
 	var p uint64
 	if b.header.freePage != 0 && pagesNeeded == 1 {
 		p = b.header.freePage
