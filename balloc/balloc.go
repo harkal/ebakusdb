@@ -24,11 +24,17 @@ type MemoryManager interface {
 	GetPtr(pos uint64) unsafe.Pointer
 }
 
+type BufferGrower interface {
+	Grow() error
+}
+
 // BufferAllocator allocates memory in a preallocated buffer
 type BufferAllocator struct {
 	bufferPtr  unsafe.Pointer
 	bufferSize uint64
 	header     *header
+
+	grower BufferGrower
 
 	mux sync.Mutex
 }
@@ -58,7 +64,7 @@ type allocPreable struct {
 var allocPreableSize uint64 = uint64(unsafe.Sizeof(allocPreable{}))
 
 // NewBufferAllocator created a new buffer allocator
-func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64, pageSize uint16) (*BufferAllocator, error) {
+func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64, pageSize uint16, grower BufferGrower) (*BufferAllocator, error) {
 	if bufSize&alignmentBytesMinusOne != 0 {
 		return nil, ErrInvalidSize
 	}
@@ -71,6 +77,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64,
 	firstFree = alignSize(firstFree)
 
 	buffer.header = (*header)(unsafe.Pointer(uintptr(bufPtr) + uintptr(firstFree)))
+	buffer.grower = grower
 	buffer.SetPageSize(pageSize)
 
 	if buffer.header.magic != magic {
@@ -124,6 +131,16 @@ var dummy uint64
 
 // Allocate a new buffer of specific size
 func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
+	p, err := b.allocate(size, zero)
+	if err == ErrOutOfMemory && b.grower != nil {
+		b.grower.Grow()
+		return b.allocate(size, zero)
+	}
+
+	return p, err
+}
+
+func (b *BufferAllocator) allocate(size uint64, zero bool) (uint64, error) {
 	if size == 0 {
 		return 0, ErrInvalidSize
 	}

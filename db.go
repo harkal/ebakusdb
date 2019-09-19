@@ -146,7 +146,7 @@ func (db *DB) init() error {
 	}
 
 	psize := uint16(unsafe.Sizeof(Node{}))
-	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize), psize)
+	allocator, err := balloc.NewBufferAllocator(unsafe.Pointer(&db.bufferRef[0]), uint64(len(db.bufferRef)), uint64(headerSize), psize, db)
 	if err != nil {
 		return err
 	}
