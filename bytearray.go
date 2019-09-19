@@ -7,6 +7,8 @@ import (
 	"github.com/harkal/ebakusdb/balloc"
 )
 
+const maxDataSize = 0x7fffff
+
 var bytesCount int
 
 func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) {
@@ -47,7 +49,7 @@ func (bPtr *ByteArray) cloneBytes(mm balloc.MemoryManager) (*ByteArray, error) {
 
 func (b *ByteArray) getBytes(mm balloc.MemoryManager) []byte {
 	//println("getBytes", b.Offset, "of count", *b.getBytesRefCount(mm), "value:", string((*[0x7fffff]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]))
-	return (*[0x7fffff]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
+	return (*[maxDataSize]byte)(mm.GetPtr(b.Offset + uint64(unsafe.Sizeof(int(0)))))[:b.Size]
 }
 
 func (b *ByteArray) getBytesRefCount(mm balloc.MemoryManager) *int32 {

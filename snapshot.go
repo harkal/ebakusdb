@@ -316,6 +316,10 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	mm := s.db.allocator
 	n := nodePtr.getNode(mm)
 
+	if vPtr.Size > maxDataSize {
+		return nil, nil, false
+	}
+
 	// Handle key exhaustion
 	if len(search) == 0 {
 		var oldVal ByteArray
@@ -531,6 +535,10 @@ func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 	k = encodeKey(k)
 	mm := s.db.allocator
 
+	if len(v) > maxDataSize {
+		return nil, false
+	}
+
 	vPtr := *newBytesFromSlice(mm, v)
 
 	s.writer.Lock()
@@ -610,6 +618,10 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		return err
 	}
 	ek := encodeKey(k)
+
+	if len(objMarshaled) > maxDataSize {
+		return fmt.Errorf("Object size is too large")
+	}
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
 	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr)
