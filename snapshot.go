@@ -541,6 +541,8 @@ func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 		s.root = *newRoot
 	}
 
+	s.db.Grow()
+
 	s.writer.Unlock()
 
 	vPtr.Release(mm)
