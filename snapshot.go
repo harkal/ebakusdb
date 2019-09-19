@@ -587,7 +587,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	s.db.decode(*tPtrMarshaled, &tbl)
 
 	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
-		panic("Object has to be a pointer")
+		return fmt.Errorf("Object has to be a pointer")
 	}
 
 	v := reflect.ValueOf(obj)

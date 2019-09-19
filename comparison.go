@@ -138,7 +138,7 @@ func eqM(arg1 reflect.Value, arg2 ...reflect.Value) (bool, error) {
 				}
 				truth = v1Big.Cmp(v2Big) == 0
 			default:
-				panic("invalid kind")
+				return false, errBadComparisonType
 			}
 		}
 		if truth {
@@ -201,7 +201,7 @@ func lt(arg1, arg2 reflect.Value) (bool, error) {
 			}
 			truth = v1Big.Cmp(v2Big) < 0
 		default:
-			panic("invalid kind")
+			return false, errBadComparisonType
 		}
 	}
 	return truth, nil
