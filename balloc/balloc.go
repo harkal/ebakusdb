@@ -25,7 +25,7 @@ type MemoryManager interface {
 }
 
 type BufferGrower interface {
-	Grow() error
+	Grow(minSize uint64) error
 }
 
 // BufferAllocator allocates memory in a preallocated buffer
@@ -133,7 +133,9 @@ var dummy uint64
 func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	p, err := b.allocate(size, zero)
 	if err == ErrOutOfMemory && b.grower != nil {
-		b.grower.Grow()
+		if err := b.grower.Grow(size); err != nil {
+			return 0, err
+		}
 		return b.allocate(size, zero)
 	}
 

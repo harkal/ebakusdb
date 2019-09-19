@@ -483,7 +483,6 @@ func (t *Txn) Delete(k []byte) bool {
 
 func (t *Txn) Commit() (uint64, error) {
 	t.writable = nil
-	t.db.Grow()
 	if t.snap != nil {
 		t.snap.root.NodeRelease(t.db.allocator)
 		t.snap.root = *t.Root()

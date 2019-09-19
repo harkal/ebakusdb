@@ -197,20 +197,21 @@ const kiloByte = 1024
 const megaByte = 1024 * kiloByte
 const gigaByte = 1024 * megaByte
 
-func (db *DB) Grow() error {
-	if float32(db.allocator.GetFree()) > float32(db.allocator.GetCapacity())*0.3 {
-		return nil
+// Grow increases the db by at least minSize
+func (db *DB) Grow(minSize uint64) error {
+
+	var curSize = db.allocator.GetCapacity()
+	newSize := curSize
+
+	for newSize-curSize < minSize {
+		if newSize < gigaByte {
+			newSize = curSize * 2
+		} else if newSize >= gigaByte {
+			newSize = curSize + gigaByte
+		}
 	}
 
-	var newSize = db.allocator.GetCapacity()
-
-	if newSize < gigaByte {
-		newSize *= 2
-	} else if newSize >= gigaByte {
-		newSize += gigaByte
-	}
-
-	//fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
+	fmt.Printf("Will grow to %d MB after %d bytes request\n", newSize/megaByte, minSize)
 
 	// Handle in memory case
 	if db.file != nil {
