@@ -313,12 +313,12 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 }
 
 func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
-	mm := s.db.allocator
-	n := nodePtr.getNode(mm)
-
-	if vPtr.Size > maxDataSize {
+	if err := vPtr.checkBytesLength(); err != nil {
 		return nil, nil, false
 	}
+
+	mm := s.db.allocator
+	n := nodePtr.getNode(mm)
 
 	// Handle key exhaustion
 	if len(search) == 0 {
@@ -532,12 +532,12 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 }
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
-	k = encodeKey(k)
-	mm := s.db.allocator
-
-	if len(v) > maxDataSize {
+	if err := checkBytesLength(v); err != nil {
 		return nil, false
 	}
+
+	k = encodeKey(k)
+	mm := s.db.allocator
 
 	vPtr := *newBytesFromSlice(mm, v)
 
@@ -611,6 +611,10 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		return err
 	}
 
+	if err := checkBytesLength(objMarshaled); err != nil {
+		return err
+	}
+
 	mm := s.db.allocator
 
 	k, err := getEncodedIndexKey(pv)
@@ -618,10 +622,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		return err
 	}
 	ek := encodeKey(k)
-
-	if len(objMarshaled) > maxDataSize {
-		return fmt.Errorf("Object size is too large")
-	}
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
 	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr)

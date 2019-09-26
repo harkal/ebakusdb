@@ -245,6 +245,10 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 }
 
 func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
+	if err := vPtr.checkBytesLength(); err != nil {
+		return nil, nil, false
+	}
+
 	mm := t.db.allocator
 	n := nodePtr.getNode(mm)
 	// Handle key exhaustion
@@ -447,6 +451,10 @@ func (t *Txn) delete(parentPtr, nPtr *Ptr, search []byte) (node *Ptr) {
 }
 
 func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
+	if err := checkBytesLength(v); err != nil {
+		return nil, false
+	}
+
 	mm := t.db.allocator
 	k = encodeKey(k)
 	vPtr := *newBytesFromSlice(mm, v)

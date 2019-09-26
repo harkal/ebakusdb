@@ -1,13 +1,18 @@
 package ebakusdb
 
 import (
+	"errors"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/harkal/ebakusdb/balloc"
 )
 
-const maxDataSize = 0x7fffff
+var (
+	ErrInvalidSize = errors.New("Input data size is invalid")
+)
+
+const maxDataSize = 0x9C4000
 
 var bytesCount int
 
@@ -45,6 +50,22 @@ func (bPtr *ByteArray) cloneBytes(mm balloc.MemoryManager) (*ByteArray, error) {
 	copy(newB, old)
 
 	return newBPtr, nil
+}
+
+func checkBytesLength(data []byte) error {
+	if uint64(unsafe.Sizeof(int(0))+uintptr(len(data))) > maxDataSize {
+		// if len(data) > maxDataSize {
+		return ErrInvalidSize
+	}
+	return nil
+}
+
+func (b *ByteArray) checkBytesLength() error {
+	if uint64(unsafe.Sizeof(int(0))+uintptr(b.Size)) > maxDataSize {
+		// if len(data) > maxDataSize {
+		return ErrInvalidSize
+	}
+	return nil
 }
 
 func (b *ByteArray) getBytes(mm balloc.MemoryManager) []byte {
