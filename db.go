@@ -12,6 +12,7 @@ import (
 
 var (
 	ErrFailedToCreateDB = errors.New("Failed to create database")
+	ErrDirtyDB          = errors.New("Dirty database found")
 )
 
 type Options struct {
@@ -74,6 +75,18 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 
 	db.path = path
 	var err error
+	var guardFile *os.File
+
+	if guardFile, err = os.OpenFile(db.path+"~", os.O_RDWR, mode); err == nil {
+		fmt.Println("Lock file in place. Database might be corrupted.", guardFile.Name())
+		return nil, ErrDirtyDB
+	}
+
+	if guardFile, err = os.OpenFile(db.path+"~", os.O_CREATE, mode); err != nil {
+		fmt.Println("Failed to create guard file", guardFile.Name())
+		return nil, ErrFailedToCreateDB
+	}
+
 	if db.file, err = os.OpenFile(db.path, flag|os.O_CREATE, mode); err != nil {
 		fmt.Println(err)
 		db.Close()
@@ -249,6 +262,9 @@ func (db *DB) Close() error {
 	}
 	if err := db.file.Close(); err != nil {
 		return fmt.Errorf("file close error: %s", err)
+	}
+	if err := os.Remove(db.GetPath() + "~"); err != nil {
+		return fmt.Errorf("Guard removeal error: %s", err)
 	}
 	db.bufferRef = nil
 	db.buffer = nil
