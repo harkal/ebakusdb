@@ -43,10 +43,49 @@ func RandStringBytesMaskImprSrc(n int) string {
 
 func Test_Open(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
-	defer os.Remove(db.GetPath())
+	defer db.Close()
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db", err)
 	}
+}
+
+func Test_Guard(t *testing.T) {
+	db, err := Open("/tmp/ebakus-guard.db", 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+		return
+	}
+
+	_, err = Open("/tmp/ebakus-guard.db", 0, nil)
+	if err == nil {
+		t.Fatal("Opened dirty db")
+	}
+
+	db.Close()
+}
+
+func Test_GuardRemoval(t *testing.T) {
+	path := "/tmp/ebakus-guard.db"
+	db, err := Open(path, 0, nil)
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+		return
+	}
+
+	var guardFile *os.File
+	if guardFile, err = os.OpenFile(path+"~", os.O_RDWR, 0666); err != nil {
+		t.Fatal("Failed to find the guard file", err)
+		return
+	}
+	guardFile.Close()
+
+	db.Close()
+
+	if guardFile, err = os.OpenFile(path+"~", os.O_RDWR, 0666); err == nil {
+		t.Fatal("Guard file not removed", err)
+		return
+	}
+	guardFile.Close()
 }
 
 func Test_Snap(test *testing.T) {
