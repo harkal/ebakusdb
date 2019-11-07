@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math/big"
 	"reflect"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Comparison.
@@ -25,6 +27,7 @@ const (
 	uintKind
 	arrayKind
 	sliceKind
+	addressKind
 	bigIntKind
 )
 
@@ -63,6 +66,9 @@ func basicKind(v reflect.Value) (kind, error) {
 	case reflect.String:
 		return stringKind, nil
 	case reflect.Array:
+		if typ == reflect.TypeOf(common.Address{}) {
+			return addressKind, nil
+		}
 		return arrayKind, nil
 	case reflect.Slice:
 		return sliceKind, nil
@@ -131,6 +137,10 @@ func eqM(arg1 reflect.Value, arg2 ...reflect.Value) (bool, error) {
 				truth = v1.Uint() == v2.Uint()
 			case arrayKind, sliceKind:
 				truth = reflect.DeepEqual(v1, v2)
+			case addressKind:
+				v1Addr := v1.Interface().(common.Address)
+				v2Addr := v2.Interface().(common.Address)
+				truth = v1Addr == v2Addr
 			case bigIntKind:
 				v1Big := v1.Interface().(*big.Int)
 				v2Big := v2.Interface().(*big.Int)

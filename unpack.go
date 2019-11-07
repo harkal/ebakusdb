@@ -109,6 +109,9 @@ func byteArrayToReflectValue(value []byte, t reflect.Type) (reflect.Value, error
 				return reflect.Value{}, err
 			}
 			return reflect.ValueOf(decoded), nil
+
+		} else if t == reflect.TypeOf(common.Address{}) {
+			return reflect.ValueOf(common.BytesToAddress(value)), nil
 		}
 	case reflect.Ptr:
 		if t == reflect.TypeOf(&big.Int{}) {
