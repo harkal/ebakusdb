@@ -681,18 +681,20 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 			// When multiple entries, remove the single entry and update
 			if len(oldUKeys) > 1 {
+				uKeys := make([][]byte, 0)
 				found := false
-				for i, v := range oldUKeys {
+				for _, v := range oldUKeys {
 					if bytes.Equal(k, v) {
-						oldUKeys = append(oldUKeys[:i], oldUKeys[i+1:]...)
 						found = true
+					} else {
+						uKeys = append(uKeys, v)
 					}
 				}
 				if !found {
 					return fmt.Errorf("Indexed key not found in old position")
 				}
 
-				ivMarshaled, err := s.db.encode(oldUKeys)
+				ivMarshaled, err := s.db.encode(uKeys)
 				if err != nil {
 					return err
 				}
