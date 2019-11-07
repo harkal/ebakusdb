@@ -16,24 +16,6 @@ func hasHexPrefix(str string) bool {
 func stringToReflectValue(value string, t reflect.Type) (reflect.Value, error) {
 	kind := t.Kind()
 
-	if t.Kind() == reflect.Ptr && t == reflect.TypeOf(&big.Int{}) {
-		var val *big.Int
-		if hasHexPrefix(value) {
-			decoded, err := hex.DecodeString(value[2:])
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			val = big.NewInt(0).SetBytes(decoded)
-		} else {
-			var ok bool
-			val, ok = big.NewInt(0).SetString(value, 10)
-			if !ok {
-				return reflect.Value{}, fmt.Errorf("unpack: failed to unpack big.Int")
-			}
-		}
-
-		return reflect.ValueOf(val), nil
-	}
 
 	switch kind {
 	case reflect.Bool:
@@ -123,6 +105,24 @@ func stringToReflectValue(value string, t reflect.Type) (reflect.Value, error) {
 				return reflect.Value{}, err
 			}
 			return reflect.ValueOf(decoded), nil
+	case reflect.Ptr:
+		if t == reflect.TypeOf(&big.Int{}) {
+			var val *big.Int
+			if hasHexPrefix(value) {
+				decoded, err := hex.DecodeString(value[2:])
+				if err != nil {
+					return reflect.Value{}, err
+				}
+				val = big.NewInt(0).SetBytes(decoded)
+			} else {
+				var ok bool
+				val, ok = big.NewInt(0).SetString(value, 10)
+				if !ok {
+					return reflect.Value{}, fmt.Errorf("unpack: failed to unpack big.Int")
+				}
+			}
+
+			return reflect.ValueOf(val), nil
 		}
 	}
 

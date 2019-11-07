@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strings"
 	"sync"
@@ -32,7 +33,6 @@ func getTableKey(table string) []byte {
 }
 
 func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
-
 	switch v.Kind() {
 	case reflect.Uint8, reflect.Int8:
 		return []byte{v.Interface().(uint8)}, nil
@@ -67,9 +67,14 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 			}
 		}
 		return r, nil
-	default:
-		return nil, fmt.Errorf("Unindexable field type")
+	case reflect.Ptr:
+		if reflect.TypeOf(v.Interface()) == reflect.TypeOf(&big.Int{}) {
+			fmt.Println("getEncodedIndexKey bigint", v.Interface().(*big.Int).Bytes())
+			return v.Interface().(*big.Int).Bytes(), nil
+		}
 	}
+
+	return nil, fmt.Errorf("Unindexable field type")
 }
 
 func getTableStructInstance(tbl *Table) (interface{}, error) {

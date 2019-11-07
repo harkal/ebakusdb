@@ -45,11 +45,11 @@ func indirectInterface(v reflect.Value) reflect.Value {
 }
 
 func basicKind(v reflect.Value) (kind, error) {
-	if v.Kind() == reflect.Ptr && v.Type() == reflect.TypeOf(&big.Int{}) {
-		return bigIntKind, nil
-	}
-
-	switch v.Kind() {
+	var (
+		kind = v.Kind()
+		typ  = v.Type()
+	)
+	switch kind {
 	case reflect.Bool:
 		return boolKind, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -66,6 +66,10 @@ func basicKind(v reflect.Value) (kind, error) {
 		return arrayKind, nil
 	case reflect.Slice:
 		return sliceKind, nil
+	case reflect.Ptr:
+		if typ == reflect.TypeOf(&big.Int{}) {
+			return bigIntKind, nil
+		}
 	}
 	return invalidKind, errBadComparisonType
 }
