@@ -313,6 +313,10 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 }
 
 func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
+	if err := vPtr.checkBytesLength(); err != nil {
+		return nil, nil, false
+	}
+
 	mm := s.db.allocator
 	n := nodePtr.getNode(mm)
 
@@ -528,6 +532,10 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 }
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
+	if err := checkBytesLength(v); err != nil {
+		return nil, false
+	}
+
 	k = encodeKey(k)
 	mm := s.db.allocator
 
@@ -600,6 +608,10 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	objMarshaled, err := s.db.encode(obj)
 	if err != nil {
+		return err
+	}
+
+	if err := checkBytesLength(objMarshaled); err != nil {
 		return err
 	}
 

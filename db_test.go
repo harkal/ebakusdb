@@ -41,6 +41,16 @@ func RandStringBytesMaskImprSrc(n int) string {
 	return string(b)
 }
 
+func RandomString(n int) string {
+	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letter[rand.Intn(len(letter))]
+	}
+	return string(b)
+}
+
 func Test_Open(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer db.Close()
@@ -86,6 +96,21 @@ func Test_GuardRemoval(t *testing.T) {
 		return
 	}
 	guardFile.Close()
+}
+
+func Test_LargeDataSizeError(test *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		test.Fatal("Failed to open db")
+	}
+
+	inputDataSize := maxDataSize + 10
+	longString := RandomString(inputDataSize)
+	t := db.GetRootSnapshot()
+	if old, _ := t.Insert([]byte("key"), []byte(longString)); old != nil {
+		test.Fatal("Test failed, huge amount of data passed in:", inputDataSize, "expected:", maxDataSize)
+	}
 }
 
 func Test_Snap(test *testing.T) {
