@@ -226,7 +226,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			whereValueType = reflect.TypeOf(whereObjValue.Interface())
 		}
 
-		whereValue, err := stringToReflectValue(string(ri.whereClause.Value), whereValueType)
+		whereValue, err := byteArrayToReflectValue(ri.whereClause.Value, whereValueType)
 		if err != nil {
 			return false
 		}

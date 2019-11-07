@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // hasHexPrefix validates str begins with '0x' or '0X'.
@@ -13,118 +15,124 @@ func hasHexPrefix(str string) bool {
 	return len(str) >= 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X')
 }
 
-func stringToReflectValue(value string, t reflect.Type) (reflect.Value, error) {
-	kind := t.Kind()
-
-	if t.Kind() == reflect.Ptr && t == reflect.TypeOf(&big.Int{}) {
-		var val *big.Int
-		if hasHexPrefix(value) {
-			decoded, err := hex.DecodeString(value[2:])
-			if err != nil {
-				return reflect.Value{}, err
-			}
-			val = big.NewInt(0).SetBytes(decoded)
-		} else {
-			var ok bool
-			val, ok = big.NewInt(0).SetString(value, 10)
-			if !ok {
-				return reflect.Value{}, fmt.Errorf("unpack: failed to unpack big.Int")
-			}
-		}
-
-		return reflect.ValueOf(val), nil
-	}
+func byteArrayToReflectValue(value []byte, t reflect.Type) (reflect.Value, error) {
+	var (
+		kind        = t.Kind()
+		stringValue = string(value)
+	)
 
 	switch kind {
 	case reflect.Bool:
-		value, err := strconv.ParseBool(value)
+		val, err := strconv.ParseBool(stringValue)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(value), nil
+		return reflect.ValueOf(val), nil
 	case reflect.Int:
-		value, err := strconv.ParseInt(value, 0, 0)
+		val, err := strconv.ParseInt(stringValue, 0, 0)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(int(value)), nil
+		return reflect.ValueOf(int(val)), nil
 	case reflect.Int8:
-		value, err := strconv.ParseInt(value, 0, 8)
+		val, err := strconv.ParseInt(stringValue, 0, 8)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(int8(value)), nil
+		return reflect.ValueOf(int8(val)), nil
 	case reflect.Int16:
-		value, err := strconv.ParseInt(value, 0, 16)
+		val, err := strconv.ParseInt(stringValue, 0, 16)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(int16(value)), nil
+		return reflect.ValueOf(int16(val)), nil
 	case reflect.Int32:
-		value, err := strconv.ParseInt(value, 0, 32)
+		val, err := strconv.ParseInt(stringValue, 0, 32)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(int32(value)), nil
+		return reflect.ValueOf(int32(val)), nil
 	case reflect.Int64:
-		value, err := strconv.ParseInt(value, 0, 64)
+		val, err := strconv.ParseInt(stringValue, 0, 64)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(int64(value)), nil
+		return reflect.ValueOf(int64(val)), nil
 	case reflect.Uint:
-		value, err := strconv.ParseUint(value, 0, 0)
+		val, err := strconv.ParseUint(stringValue, 0, 0)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(uint(value)), nil
+		return reflect.ValueOf(uint(val)), nil
 	case reflect.Uint8:
-		value, err := strconv.ParseUint(value, 0, 8)
+		val, err := strconv.ParseUint(stringValue, 0, 8)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(uint8(value)), nil
+		return reflect.ValueOf(uint8(val)), nil
 	case reflect.Uint16:
-		value, err := strconv.ParseUint(value, 0, 16)
+		val, err := strconv.ParseUint(stringValue, 0, 16)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(uint16(value)), nil
+		return reflect.ValueOf(uint16(val)), nil
 	case reflect.Uint32:
-		value, err := strconv.ParseUint(value, 0, 32)
+		val, err := strconv.ParseUint(stringValue, 0, 32)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(uint32(value)), nil
+		return reflect.ValueOf(uint32(val)), nil
 	case reflect.Uint64:
-		value, err := strconv.ParseUint(value, 0, 64)
+		val, err := strconv.ParseUint(stringValue, 0, 64)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(uint64(value)), nil
+		return reflect.ValueOf(uint64(val)), nil
 	case reflect.Float32:
-		value, err := strconv.ParseFloat(value, 32)
+		val, err := strconv.ParseFloat(stringValue, 32)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(float32(value)), nil
+		return reflect.ValueOf(float32(val)), nil
 	case reflect.Float64:
-		value, err := strconv.ParseFloat(value, 64)
+		val, err := strconv.ParseFloat(stringValue, 64)
 		if err != nil {
 			return reflect.Value{}, err
 		}
-		return reflect.ValueOf(float64(value)), nil
+		return reflect.ValueOf(float64(val)), nil
 	case reflect.String:
-		return reflect.ValueOf(value), nil
+		return reflect.ValueOf(stringValue), nil
 	case reflect.Slice, reflect.Array:
-		if hasHexPrefix(value) {
-			decoded, err := hex.DecodeString(value[2:])
+		if hasHexPrefix(stringValue) {
+			decoded, err := hex.DecodeString(stringValue[2:])
 			if err != nil {
 				return reflect.Value{}, err
 			}
 			return reflect.ValueOf(decoded), nil
+
+		} else if t == reflect.TypeOf(common.Address{}) {
+			return reflect.ValueOf(common.BytesToAddress(value)), nil
+		}
+	case reflect.Ptr:
+		if t == reflect.TypeOf(&big.Int{}) {
+			var val *big.Int
+			if hasHexPrefix(stringValue) {
+				decoded, err := hex.DecodeString(stringValue[2:])
+				if err != nil {
+					return reflect.Value{}, err
+				}
+				val = big.NewInt(0).SetBytes(decoded)
+			} else {
+				var ok bool
+				val, ok = big.NewInt(0).SetString(stringValue, 10)
+				if !ok {
+					return reflect.Value{}, fmt.Errorf("unpack: failed to unpack big.Int")
+				}
+			}
+
+			return reflect.ValueOf(val), nil
 		}
 	}
 
-	return reflect.ValueOf(value), nil
+	return reflect.ValueOf(stringValue), nil
 }
