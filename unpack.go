@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ebakus/node/common"
 )
 
 // hasHexPrefix validates str begins with '0x' or '0X'.
