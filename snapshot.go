@@ -10,6 +10,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/ebakus/go-ebakus/common/math"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -69,8 +70,7 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 		return r, nil
 	case reflect.Ptr:
 		if reflect.TypeOf(v.Interface()) == reflect.TypeOf(&big.Int{}) {
-			fmt.Println("getEncodedIndexKey bigint", v.Interface().(*big.Int).Bytes())
-			return v.Interface().(*big.Int).Bytes(), nil
+			return math.PaddedBigBytes(v.Interface().(*big.Int), 32), nil
 		}
 	}
 
