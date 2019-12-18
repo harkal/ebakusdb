@@ -882,6 +882,60 @@ func Test_TableOrderingBigInt(t *testing.T) {
 		lastPayout = new(big.Int).Set(w.Payout)
 	}
 }
+
+func Test_TableOrderingInt(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id     common.Address
+		Payout int
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Payout",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x02d4697643696464de19438f581519cb11ca750b"),
+		Payout: 255,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x3b6b4e86529e0e19dc32ff78a56c344c3a6bf895"),
+		Payout: -255,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	var w Witness
+
+	orderClause, _ := snap.OrderParser([]byte("Payout DESC"))
+	iter, err := snap.Select(WitnessesTable, nil, orderClause)
+
+	lastPayout := 1000
+	for iter.Next(&w) {
+		fmt.Println(w.Id.Hex(), w.Payout)
+		if w.Payout > lastPayout {
+			t.Fatal("Improper ordering")
+		}
+		lastPayout = w.Payout
+	}
+
+	t.Fatal("END")
+}
+
 func Test_TableDuplicates(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
