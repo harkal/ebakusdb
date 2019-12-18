@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ebakus/node/common"
+	"github.com/ebakus/go-ebakus/common"
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
