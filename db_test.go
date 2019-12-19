@@ -909,7 +909,7 @@ func Test_TableOrderingInt(t *testing.T) {
 
 	type Witness struct {
 		Id     common.Address
-		Payout int
+		Payout int64
 	}
 
 	const WitnessesTable string = "Witnesses"
@@ -941,7 +941,7 @@ func Test_TableOrderingInt(t *testing.T) {
 	orderClause, _ := snap.OrderParser([]byte("Payout DESC"))
 	iter, err := snap.Select(WitnessesTable, nil, orderClause)
 
-	lastPayout := 1000
+	lastPayout := int64(1000)
 	for iter.Next(&w) {
 		fmt.Println(w.Id.Hex(), w.Payout)
 		if w.Payout > lastPayout {
@@ -949,8 +949,6 @@ func Test_TableOrderingInt(t *testing.T) {
 		}
 		lastPayout = w.Payout
 	}
-
-	t.Fatal("END")
 }
 
 func Test_TableDuplicates(t *testing.T) {
