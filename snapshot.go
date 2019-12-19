@@ -64,7 +64,7 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 			case reflect.Uint8:
 				r = append(r, byte(e.Uint()))
 			default:
-				return nil, fmt.Errorf("Unindexable field type")
+				return nil, fmt.Errorf("Unindexable field type (%s)", e.Kind())
 			}
 		}
 		return r, nil
@@ -74,7 +74,7 @@ func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("Unindexable field type")
+	return nil, fmt.Errorf("Unindexable field type (%s)", v.Kind())
 }
 
 func getTableStructInstance(tbl *Table) (interface{}, error) {
