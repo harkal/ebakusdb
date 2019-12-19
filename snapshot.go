@@ -33,21 +33,37 @@ func getTableKey(table string) []byte {
 	return []byte("t_" + table)
 }
 
+// Note: negative numbers are converted to excess-k from 2-complement
+//       in order to allow proper in sequence iteration over the trie
 func getEncodedIndexKey(v reflect.Value) ([]byte, error) {
 	switch v.Kind() {
-	case reflect.Uint8, reflect.Int8:
+	case reflect.Uint8:
 		return []byte{v.Interface().(uint8)}, nil
-	case reflect.Uint16, reflect.Int16:
+	case reflect.Int8:
+		return []byte{v.Interface().(uint8) ^ 1<<7}, nil
+	case reflect.Uint16:
 		b := make([]byte, 2)
 		binary.BigEndian.PutUint16(b, uint16(v.Uint()))
 		return b, nil
-	case reflect.Uint32, reflect.Int32:
+	case reflect.Int16:
+		b := make([]byte, 2)
+		binary.BigEndian.PutUint16(b, uint16(v.Uint())^1<<15)
+		return b, nil
+	case reflect.Uint32:
 		b := make([]byte, 4)
 		binary.BigEndian.PutUint32(b, uint32(v.Uint()))
 		return b, nil
-	case reflect.Uint64, reflect.Int64:
+	case reflect.Int32:
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint32(b, uint32(v.Uint())^1<<31)
+		return b, nil
+	case reflect.Uint64:
 		b := make([]byte, 8)
 		binary.BigEndian.PutUint64(b, v.Uint())
+		return b, nil
+	case reflect.Int64:
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, uint64(v.Int())^1<<63)
 		return b, nil
 	case reflect.String:
 		return []byte(v.String()), nil
