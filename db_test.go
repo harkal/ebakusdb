@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -883,12 +884,28 @@ func Test_TableOrderingBigInt(t *testing.T) {
 	}
 }
 
+func GobMarshal(v interface{}) ([]byte, error) {
+	b := new(bytes.Buffer)
+	err := gob.NewEncoder(b).Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func GobUnmarshal(data []byte, v interface{}) error {
+	b := bytes.NewBuffer(data)
+	return gob.NewDecoder(b).Decode(v)
+}
+
 func Test_TableOrderingInt(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
 	if err != nil || db == nil {
 		t.Fatal("Failed to open db", err)
 	}
+
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
 
 	type Witness struct {
 		Id     common.Address
