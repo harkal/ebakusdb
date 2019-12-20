@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/harkal/ebakusdb/balloc"
+	"github.com/ebakus/ebakusdb/balloc"
 )
 
 type edge struct {

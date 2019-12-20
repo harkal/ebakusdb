@@ -7,7 +7,7 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/harkal/ebakusdb/balloc"
+	"github.com/ebakus/ebakusdb/balloc"
 )
 
 var (
