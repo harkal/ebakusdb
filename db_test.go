@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	"io/ioutil"
 	"math/big"
@@ -10,7 +11,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ebakus/node/common"
+	"github.com/ebakus/go-ebakus/common"
 )
 
 //var src = rand.NewSource(time.Now().UnixNano())
@@ -829,6 +830,184 @@ func Test_TableOrdering(t *testing.T) {
 			t.Fatal("Improper ordering")
 		}
 		lastStake = w.Stake
+	}
+}
+
+func Test_TableOrderingBigInt(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	type Witness struct {
+		Id     common.Address
+		Payout *big.Int
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Payout",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x02d4697643696464de19438f581519cb11ca750b"),
+		Payout: big.NewInt(355),
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x3b6b4e86529e0e19dc32ff78a56c344c3a6bf895"),
+		Payout: big.NewInt(255),
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	var w Witness
+
+	orderClause, _ := snap.OrderParser([]byte("Payout DESC"))
+	iter, err := snap.Select(WitnessesTable, nil, orderClause)
+
+	lastPayout := big.NewInt(1000)
+	for iter.Next(&w) {
+		fmt.Println(w.Id.Hex(), w.Payout)
+		if w.Payout.Cmp(lastPayout) > 0 {
+			t.Fatal("Improper ordering")
+		}
+		lastPayout = new(big.Int).Set(w.Payout)
+	}
+}
+
+func GobMarshal(v interface{}) ([]byte, error) {
+	b := new(bytes.Buffer)
+	err := gob.NewEncoder(b).Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func GobUnmarshal(data []byte, v interface{}) error {
+	b := bytes.NewBuffer(data)
+	return gob.NewDecoder(b).Decode(v)
+}
+
+func Test_TableOrderingInt(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
+
+	type Witness struct {
+		Id     common.Address
+		Payout int64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Payout",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x02d4697643696464de19438f581519cb11ca750b"),
+		Payout: 255,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x3b6b4e86529e0e19dc32ff78a56c344c3a6bf895"),
+		Payout: -255,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	var w Witness
+
+	orderClause, _ := snap.OrderParser([]byte("Payout DESC"))
+	iter, err := snap.Select(WitnessesTable, nil, orderClause)
+
+	lastPayout := int64(1000)
+	for iter.Next(&w) {
+		fmt.Println(w.Id.Hex(), w.Payout)
+		if w.Payout > lastPayout {
+			t.Fatal("Improper ordering")
+		}
+		lastPayout = w.Payout
+	}
+}
+
+func Test_TableOrderingBigIntNegative(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
+
+	type Witness struct {
+		Id     common.Address
+		Payout *big.Int
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Payout",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x02f4697643696464de19438f581519cb11ca750b"),
+		Payout: big.NewInt(-2),
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x02d4697643696464de19438f581519cb11ca750b"),
+		Payout: big.NewInt(0),
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:     common.HexToAddress("0x3b6b4e86529e0e19dc32ff78a56c344c3a6bf895"),
+		Payout: big.NewInt(-1),
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	var w Witness
+
+	orderClause, _ := snap.OrderParser([]byte("Payout DESC"))
+	iter, err := snap.Select(WitnessesTable, nil, orderClause)
+
+	lastPayout := big.NewInt(1000)
+	for iter.Next(&w) {
+		fmt.Println(w.Id.Hex(), w.Payout)
+		if w.Payout.Cmp(lastPayout) > 0 {
+			t.Fatal("Improper ordering")
+		}
+		lastPayout.Set(w.Payout)
 	}
 }
 
