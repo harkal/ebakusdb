@@ -172,7 +172,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 
 		whereValueType = reflect.TypeOf(whereObjValue.Interface())
 
-		if whereValueType.Kind() != reflect.String && whereValueType.Kind() != reflect.Array && whereValueType.Kind() != reflect.Slice {
+		if whereValueType.Kind() != reflect.String && whereValueType.Kind() != reflect.Array {
 			ri.iter.SeekPrefix(ri.whereClause.Value)
 			ri.whereClause = nil
 			return ri.Next(val)
