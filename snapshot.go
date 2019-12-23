@@ -168,6 +168,10 @@ func getReflectTypeFromString(t string) (reflect.Type, error) {
 		return reflect.TypeOf(complex128(0)), nil
 	case "string":
 		return reflect.TypeOf(""), nil
+	case "big.Int":
+		return reflect.TypeOf(big.Int{}), nil
+	case "*big.Int":
+		return reflect.TypeOf(&big.Int{}), nil
 	}
 	return nil, fmt.Errorf("unsupported arg type: %s", t)
 }
