@@ -4,7 +4,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/harkal/ebakusdb/balloc"
+	"github.com/ebakus/ebakusdb/balloc"
 )
 
 func Test_CreateBuffer(t *testing.T) {

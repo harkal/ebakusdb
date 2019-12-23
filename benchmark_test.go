@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/harkal/ebakusdb"
+	"github.com/ebakus/ebakusdb"
 )
 
 var openDBSize = flag.Int("open_db_size", 128*1024*1024, "Number of entries in db for opening")
