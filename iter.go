@@ -172,8 +172,18 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 
 		whereValueType = reflect.TypeOf(whereObjValue.Interface())
 
-		if whereValueType.Kind() != reflect.String && whereValueType.Kind() != reflect.Array {
-			ri.iter.SeekPrefix(ri.whereClause.Value)
+		if whereValueType.Kind() != reflect.String {
+			whereValue, err := byteArrayToReflectValue(ri.whereClause.Value, whereValueType)
+			if err != nil {
+				return false
+			}
+
+			k, err := getEncodedIndexKey(whereValue)
+			if err != nil {
+				return false
+			}
+
+			ri.iter.SeekPrefix(k)
 			ri.whereClause = nil
 			return ri.Next(val)
 		}
