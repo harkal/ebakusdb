@@ -1654,7 +1654,18 @@ func Test_Vote(t *testing.T) {
 		t.Fatal("Failed to insert stake row error:", err)
 	}
 
-	for index := 0; index < 2; index++ {
+	db.SetRootSnapshot(snap)
+	snap.Release()
+
+	snap = db.GetRootSnapshot()
+
+	for index := 0; index < 4; index++ {
+		var ebakusSnapshot *Snapshot
+		if index == 2 {
+			ebakusSnapshot = snap.Snapshot()
+			fmt.Println("ebakusSnapshot1", ebakusSnapshot)
+		}
+
 		fmt.Println("\n\n------ Get staked")
 		var staked Staked
 
@@ -1740,6 +1751,12 @@ func Test_Vote(t *testing.T) {
 			Id: AddressesToDelegationId(bootProducer, bootProducer),
 		}); err != nil {
 			t.Fatal("Failed to insert delegation row error:", err)
+		}
+
+		if index == 2 {
+			fmt.Println("ebakusSnapshot2", ebakusSnapshot)
+			snap.ResetTo(ebakusSnapshot)
+			ebakusSnapshot.Release()
 		}
 	}
 	t.Fatal("s")
