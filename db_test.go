@@ -1573,6 +1573,310 @@ func Test_InsertLookupPrefixAfterMergeOnParentTableNode(t *testing.T) {
 	}
 }
 
+type Witness struct {
+	Id    common.Address
+	Stake uint64
+	Flags uint64
+}
+
+// DelegationId represents the 40 byte of two 20 bytes addresses combined.
+type DelegationId [common.AddressLength * 2]byte
+
+type Delegation struct {
+	Id DelegationId // <from><witness>
+}
+
+// var DelegationTable = ebkdb.GetDBTableName(types.PrecompliledSystemContract, "Delegations")
+
+// AddressesToDelegationId returns bytes of both from address and target address.
+func AddressesToDelegationId(from common.Address, witness common.Address) DelegationId {
+	var id DelegationId
+
+	copy(id[:], from[:])
+	copy(id[common.AddressLength:], witness[:])
+
+	return id
+}
+
+// Content gets from and witness addresses.
+func (id DelegationId) Content() (from common.Address, witness common.Address) {
+	from = common.BytesToAddress(id[:common.AddressLength])
+	witness = common.BytesToAddress(id[common.AddressLength:])
+	return
+}
+
+type Staked struct {
+	Id     common.Address // Owner account
+	Amount uint64
+}
+
+var StakedTable = "Staked"
+
+func Test_Vote(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
+
+	// type Delegation struct {
+	// 	Id [40]byte
+	// }
+
+	db.CreateTable(StakedTable, &Staked{})
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+
+	const WitnessesTable = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	// bootProducerBytes := []byte{26, 13, 194, 38, 138, 105, 81, 158, 24, 167, 67, 97, 64, 71, 182, 215, 63, 93, 220, 244}
+	// bootProducer := common.BytesToAddress(bootProducerBytes)
+	bootProducer := common.HexToAddress("0x1dc1e768e30d7efcde11d384b535082de56f7c51")
+
+	bootProducerStakeAmount := uint64(10000)
+	if err := snap.InsertObj(WitnessesTable, &Witness{Id: bootProducer, Stake: bootProducerStakeAmount, Flags: 1}); err != nil {
+		t.Fatal("Failed to insert witness row error:", err)
+	}
+
+	if err := snap.InsertObj(StakedTable, &Staked{Id: bootProducer, Amount: bootProducerStakeAmount}); err != nil {
+		t.Fatal("Failed to insert stake row error:", err)
+	}
+
+	for index := 0; index < 2; index++ {
+		fmt.Println("\n\n------ Get staked")
+		var staked Staked
+
+		where := []byte("Id LIKE ")
+		whereClause, err := snap.WhereParser(append(where, bootProducer.Bytes()...))
+
+		iter, err := snap.Select(StakedTable, whereClause)
+		if err != nil {
+			t.Fatal("Failed to get staked select error:", err)
+		}
+
+		if iter.Next(&staked) == false {
+			t.Fatal("Failed to get staked error:", err)
+		}
+
+		fmt.Println("\t", "address", staked.Id.Hex(), "amount", staked.Amount)
+
+		fmt.Println("-- Unvote")
+
+		fmt.Println("------ Select boot delegations")
+		where = []byte(`Id LIKE `)
+		whereClause, _ = snap.WhereParser(append(where, bootProducer.Bytes()...))
+
+		var d Delegation
+		delegationsToBeDeleted := make([]Delegation, 0)
+
+		iter, _ = snap.Select(DelegationsTable, whereClause)
+		for iter.Next(&d) {
+			delegationsToBeDeleted = append(delegationsToBeDeleted, d)
+
+			from, witness := d.Id.Content()
+			fmt.Println("\t", "from", from, "witness", witness)
+
+			fmt.Println("\t------ Select voted witnesses")
+			where := []byte(`Id LIKE `)
+			whereClause, _ := snap.WhereParser(append(where, witness.Bytes()...))
+
+			var w Witness
+
+			iter, _ := snap.Select(WitnessesTable, whereClause)
+			if found := iter.Next(&w); !found {
+				t.Fatal("\t\tWitness not found error:", err)
+			}
+
+			fmt.Println("\t\t", "witness", w.Id.Hex(), "staked", w.Stake, "removeAmount", staked.Amount)
+
+			w.Stake = w.Stake - staked.Amount
+
+			if err := snap.InsertObj(WitnessesTable, &w); err != nil {
+				t.Fatal("\t\tWitness update error:", err)
+			}
+		}
+
+		for _, delegation := range delegationsToBeDeleted {
+			fmt.Println("\t", "Delegations to be deleted", len(delegationsToBeDeleted))
+			if err := snap.DeleteObj(DelegationsTable, delegation.Id); err != nil {
+				t.Fatal("Failed to delete delegation error:", err)
+			}
+		}
+
+		fmt.Println("-- Vote")
+
+		fmt.Println("------ Select boot for voting")
+		where = []byte(`Id LIKE `)
+		whereClause, _ = snap.WhereParser(append(where, bootProducer.Bytes()...))
+
+		var w Witness
+
+		iter, _ = snap.Select(WitnessesTable, whereClause)
+		if found := iter.Next(&w); !found {
+			t.Fatal("\tWitness not found error:", err)
+		}
+
+		fmt.Println("\t", "witness", w.Id.Hex(), "staked", w.Stake, "addAmount", staked.Amount)
+
+		w.Stake = w.Stake + staked.Amount
+
+		if err := snap.InsertObj(WitnessesTable, &w); err != nil {
+			t.Fatal("\tWitness update error:", err)
+		}
+
+		if err := snap.InsertObj(DelegationsTable, &Delegation{
+			Id: AddressesToDelegationId(bootProducer, bootProducer),
+		}); err != nil {
+			t.Fatal("Failed to insert delegation row error:", err)
+		}
+	}
+	t.Fatal("s")
+}
+
+func Test_Delegates(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
+
+	// type Delegation struct {
+	// 	Id [40]byte
+	// }
+
+	db.CreateTable(StakedTable, &Staked{})
+
+	const DelegationsTable string = "Delegations"
+
+	db.CreateTable(DelegationsTable, &Delegation{})
+
+	const WitnessesTable = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	// bootProducerBytes := []byte{26, 13, 194, 38, 138, 105, 81, 158, 24, 167, 67, 97, 64, 71, 182, 215, 63, 93, 220, 244}
+	// bootProducer := common.BytesToAddress(bootProducerBytes)
+	bootProducer := common.HexToAddress("0x1dc1e768e30d7efcde11d384b535082de56f7c51")
+	witness1Bytes := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 97, 98, 100}
+	witness1 := common.BytesToAddress(witness1Bytes)
+	witness2Bytes := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 97, 98, 200}
+	witness2 := common.BytesToAddress(witness2Bytes)
+
+	p1 := AddressesToDelegationId(bootProducer, bootProducer)
+	p2 := AddressesToDelegationId(witness1, bootProducer)
+	p3 := AddressesToDelegationId(witness1, witness2)
+
+	bootProducerStakeAmount := uint64(10000)
+	if err := snap.InsertObj(WitnessesTable, &Witness{Id: bootProducer, Stake: bootProducerStakeAmount, Flags: 1}); err != nil {
+		t.Fatal("Failed to insert witness row error:", err)
+	}
+
+	for index := 0; index < 2; index++ {
+
+		fmt.Println("------ Insert ALL")
+
+		if err := snap.InsertObj(DelegationsTable, &Delegation{
+			Id: p1,
+		}); err != nil {
+			t.Fatal("Failed to insert row error:", err)
+		}
+		if err := snap.InsertObj(DelegationsTable, &Delegation{
+			Id: p2,
+		}); err != nil {
+			t.Fatal("Failed to insert row error:", err)
+		}
+		if err := snap.InsertObj(DelegationsTable, &Delegation{
+			Id: p3,
+		}); err != nil {
+			t.Fatal("Failed to insert row error:", err)
+		}
+
+		fmt.Println("------ Delete all")
+		var d Delegation
+
+		delegationsToBeDeleted := make([]Delegation, 0)
+		iter, _ := snap.Select(DelegationsTable)
+		for iter.Next(&d) {
+			delegationsToBeDeleted = append(delegationsToBeDeleted, d)
+
+			from, witness := d.Id.Content()
+			fmt.Println("\t", "from", from, "witness", witness)
+		}
+
+		for _, delegation := range delegationsToBeDeleted {
+			if err := snap.DeleteObj(DelegationsTable, delegation.Id); err != nil {
+				t.Fatal("Failed to delete delegation error:", err)
+			}
+		}
+	}
+
+	fmt.Println("------ Insert ALL")
+
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+	if err := snap.InsertObj(DelegationsTable, &Delegation{
+		Id: p3,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	var d Delegation
+
+	fmt.Println("------ Select mine")
+	where := []byte(`Id LIKE `)
+	whereClause, _ := snap.WhereParser(append(where, witness1.Bytes()...))
+	iter, err := snap.Select(DelegationsTable, whereClause)
+	if err != nil {
+		t.Fatal("Failed to create iterator error:", err)
+	}
+
+	for iter.Next(&d) {
+		from, witness := d.Id.Content()
+		fmt.Println("\t", "from", from, "witness", witness)
+	}
+
+	// if found := iter.Next(&d); !found {
+	// 	t.Fatal("Found wrong row (expected p2)", found, d)
+	// }
+
+	// if found := iter.Next(&d); !found {
+	// 	t.Fatal("Found wrong row (expected p3)", found, d)
+	// }
+
+	// if found := iter.Next(&d); found {
+	// 	t.Fatal("Found more rows", found, d)
+	// }
+	t.Fatal("s")
+}
+
 func Test_InsertLookupPrefixAfterMergeOnParentTableNodeForEmptyIdValue(t *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
