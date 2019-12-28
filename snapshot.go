@@ -1048,25 +1048,20 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		}
 	}
 
-	if whereClause == nil && orderClause == nil {
+	if orderClause.Field == "Id" {
 		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
 
 	} else {
-		if orderClause.Field == "Id" {
-			iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-
-		} else {
-			ifield := IndexField{Table: table, Field: orderClause.Field}
-			tPtrMarshaled, found := s.Get(ifield.getIndexKey())
-			if found == false {
-				return nil, fmt.Errorf("Unknown index")
-			}
-			var tPtr Ptr
-			s.db.decode(*tPtrMarshaled, &tPtr)
-			iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
-
-			tblNode = tbl.Node.getNode(s.db.allocator)
+		ifield := IndexField{Table: table, Field: orderClause.Field}
+		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+		if found == false {
+			return nil, fmt.Errorf("Unknown index")
 		}
+		var tPtr Ptr
+		s.db.decode(*tPtrMarshaled, &tPtr)
+		iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
+
+		tblNode = tbl.Node.getNode(s.db.allocator)
 	}
 
 	return &ResultIterator{
