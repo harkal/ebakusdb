@@ -799,6 +799,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
+
+	mm := s.db.allocator
+
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
 
@@ -807,8 +810,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		return err
 	}
 	ek := encodeKey(k)
-
-	mm := s.db.allocator
 
 	newRoot, oldVal := s.delete(nil, &tbl.Node, ek)
 	if oldVal != nil {
@@ -833,7 +834,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.Insert(getTableKey(table), tblMarshaled)
