@@ -199,13 +199,13 @@ type Txn struct {
 
 func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 	mm := t.db.allocator
-	if t.writable == nil {
-		lru, err := simplelru.NewLRU(defaultWritableCache, nil)
-		if err != nil {
-			panic(err)
-		}
-		t.writable = lru
-	}
+	// if t.writable == nil {
+	// 	lru, err := simplelru.NewLRU(defaultWritableCache, nil)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	t.writable = lru
+	// }
 
 	n := nodePtr.getNode(mm)
 
@@ -239,7 +239,7 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 		edgeNode.getNode(mm).Retain()
 	}
 
-	t.writable.Add(*ncPtr, nil)
+	// t.writable.Add(*ncPtr, nil)
 
 	return ncPtr
 }

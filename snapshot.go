@@ -301,13 +301,13 @@ func (s *Snapshot) ResetTo(to *Snapshot) {
 
 func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 	mm := s.db.allocator
-	if s.writable == nil {
-		lru, err := simplelru.NewLRU(defaultWritableCache, nil)
-		if err != nil {
-			panic(err)
-		}
-		s.writable = lru
-	}
+	// if s.writable == nil {
+	// 	lru, err := simplelru.NewLRU(defaultWritableCache, nil)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	s.writable = lru
+	// }
 
 	n := nodePtr.getNode(mm)
 
@@ -341,7 +341,7 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 		edgeNode.getNode(mm).Retain()
 	}
 
-	s.writable.Add(*ncPtr, nil)
+	// s.writable.Add(*ncPtr, nil)
 
 	return ncPtr
 }
