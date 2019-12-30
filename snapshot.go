@@ -625,8 +625,12 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
+
+	mm := s.db.allocator
+
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
+	tbl.Node.getNode(mm).Retain()
 
 	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
 		return fmt.Errorf("Object has to be a pointer")
@@ -649,8 +653,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		return err
 	}
 
-	mm := s.db.allocator
-
 	k, err := getEncodedIndexKey(pv)
 	if err != nil {
 		return err
@@ -662,6 +664,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	objPtr.Release(mm)
 
 	if newRoot != nil {
+		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.Insert(getTableKey(table), tblMarshaled)
@@ -804,6 +807,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
+	tbl.Node.getNode(mm).Retain()
 
 	k, err := getEncodedIndexKey(reflect.ValueOf(id))
 	if err != nil {
@@ -834,6 +838,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 
 	if newRoot != nil {
+		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.Insert(getTableKey(table), tblMarshaled)
