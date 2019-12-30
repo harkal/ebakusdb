@@ -10,14 +10,14 @@ import (
 
 type edge struct {
 	key  byte
-	node *Node
+	node Ptr
 }
 
 type edges []edge
 
 type Iterator struct {
 	rootNode Ptr
-	node     *Node
+	node     Ptr
 	stack    []edges
 	mm       balloc.MemoryManager
 }
@@ -30,8 +30,8 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 	prefix = encodeKey(prefix)
 	i.stack = nil
 	n := i.node
-	if n == nil {
-		n = i.rootNode.getNode(i.mm)
+	if n.isNull() {
+		n = i.rootNode
 	}
 	search := prefix
 	for {
@@ -40,14 +40,14 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 			return
 		}
 
-		nPtr := n.edges[search[0]]
+		nPtr := n.getNode(i.mm).edges[search[0]]
 		if nPtr.isNull() {
-			i.node = nil
+			i.node = 0
 			return
 		}
-		n = nPtr.getNode(i.mm)
+		n = nPtr
 
-		nprefix := n.prefixPtr.getBytes(i.mm)
+		nprefix := n.getNode(i.mm).prefixPtr.getBytes(i.mm)
 		if bytes.HasPrefix(search, nprefix) {
 			search = search[len(nprefix):]
 
@@ -55,14 +55,14 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 			i.node = n
 			return
 		} else {
-			i.node = nil
+			i.node = 0
 			return
 		}
 	}
 }
 
 func (i *Iterator) Next() ([]byte, []byte, bool) {
-	if i.stack == nil && i.node != nil {
+	if i.stack == nil && !i.node.isNull() {
 		i.stack = []edges{
 			edges{
 				edge{node: i.node},
@@ -82,9 +82,9 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 		}
 
 		es := make(edges, 0)
-		for k, nPtr := range elem.edges {
+		for k, nPtr := range elem.getNode(i.mm).edges {
 			if !nPtr.isNull() {
-				e := edge{key: byte(k), node: nPtr.getNode(i.mm)}
+				e := edge{key: byte(k), node: nPtr}
 				es = append(es, e)
 			}
 		}
@@ -93,8 +93,9 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 			i.stack = append(i.stack, es)
 		}
 
-		if elem.isLeaf() {
-			return decodeKey(elem.keyPtr.getBytes(i.mm)), elem.valPtr.getBytes(i.mm), true
+		elemNode := elem.getNode(i.mm)
+		if elemNode.isLeaf() {
+			return decodeKey(elemNode.keyPtr.getBytes(i.mm)), elemNode.valPtr.getBytes(i.mm), true
 		}
 	}
 
@@ -102,7 +103,7 @@ func (i *Iterator) Next() ([]byte, []byte, bool) {
 }
 
 func (i *Iterator) Prev() ([]byte, []byte, bool) {
-	if i.stack == nil && i.node != nil {
+	if i.stack == nil && !i.node.isNull() {
 		i.stack = []edges{
 			edges{
 				edge{node: i.node},
@@ -122,10 +123,11 @@ func (i *Iterator) Prev() ([]byte, []byte, bool) {
 		}
 
 		es := make(edges, 0)
-		for k, _ := range elem.edges {
-			nPtr := elem.edges[len(elem.edges)-k-1]
+		elemNode := elem.getNode(i.mm)
+		for k, _ := range elemNode.edges {
+			nPtr := elemNode.edges[len(elemNode.edges)-k-1]
 			if !nPtr.isNull() {
-				e := edge{key: byte(k), node: nPtr.getNode(i.mm)}
+				e := edge{key: byte(k), node: nPtr}
 				es = append(es, e)
 			}
 		}
@@ -134,8 +136,8 @@ func (i *Iterator) Prev() ([]byte, []byte, bool) {
 			i.stack = append(i.stack, es)
 		}
 
-		if elem.isLeaf() {
-			return decodeKey(elem.keyPtr.getBytes(i.mm)), elem.valPtr.getBytes(i.mm), true
+		if elemNode.isLeaf() {
+			return decodeKey(elemNode.keyPtr.getBytes(i.mm)), elemNode.valPtr.getBytes(i.mm), true
 		}
 	}
 

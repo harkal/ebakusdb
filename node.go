@@ -46,9 +46,7 @@ func (p *Ptr) getNode(mm balloc.MemoryManager) *Node {
 }
 
 func (p *Ptr) getNodeIterator(mm balloc.MemoryManager) *Iterator {
-	n := p.getNode(mm)
-	n.Retain()
-	return &Iterator{rootNode: *p, node: n, mm: mm}
+	return &Iterator{rootNode: *p, node: *p, mm: mm}
 }
 
 func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
