@@ -16,10 +16,14 @@ type edge struct {
 type edges []edge
 
 type Iterator struct {
-	rootNode *Node
+	rootNode Ptr
 	node     *Node
 	stack    []edges
 	mm       balloc.MemoryManager
+}
+
+func (i *Iterator) Release() {
+	i.rootNode.NodeRelease(i.mm)
 }
 
 func (i *Iterator) SeekPrefix(prefix []byte) {
@@ -27,7 +31,7 @@ func (i *Iterator) SeekPrefix(prefix []byte) {
 	i.stack = nil
 	n := i.node
 	if n == nil {
-		n = i.rootNode
+		n = i.rootNode.getNode(i.mm)
 	}
 	search := prefix
 	for {

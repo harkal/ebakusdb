@@ -45,6 +45,12 @@ func (p *Ptr) getNode(mm balloc.MemoryManager) *Node {
 	return (*Node)(mm.GetPtr(uint64(*p)))
 }
 
+func (p *Ptr) getNodeIterator(mm balloc.MemoryManager) *Iterator {
+	n := p.getNode(mm)
+	n.Retain()
+	return &Iterator{rootNode: *p, node: n, mm: mm}
+}
+
 func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 	if *nPtr == 0 {
 		return false
@@ -163,10 +169,6 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 		return last.keyPtr.getBytes(mm), last.valPtr.getBytes(mm), true
 	}
 	return nil, nil, false
-}
-
-func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
-	return &Iterator{rootNode: n, node: n, mm: mm}
 }
 
 func (n *Node) printTree(mm balloc.MemoryManager, ident int) {

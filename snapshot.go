@@ -277,7 +277,7 @@ func (s *Snapshot) HasTable(table string) bool {
 }
 
 func (s *Snapshot) Iter() *Iterator {
-	iter := s.root.getNode(s.db.allocator).Iterator(s.db.allocator)
+	iter := s.root.getNodeIterator(s.db.allocator)
 	return iter
 }
 
@@ -1054,8 +1054,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}
 
 	if orderClause.Field == "Id" {
-		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-
+		iter = tbl.Node.getNodeIterator(s.db.allocator)
 	} else {
 		ifield := IndexField{Table: table, Field: orderClause.Field}
 		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
@@ -1064,7 +1063,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
+		iter = tPtr.getNodeIterator(s.db.allocator)
 
 		tblNode = tbl.Node.getNode(s.db.allocator)
 	}
