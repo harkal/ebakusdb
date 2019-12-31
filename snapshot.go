@@ -244,7 +244,7 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 
 	v, _ := s.db.encode(tbl)
 	s.InsertWithNode(getTableKey(table), v, tbl.Node)
-	tbl.Node.NodeRelease(s.db.allocator)
+	//tbl.Node.NodeRelease(s.db.allocator)
 
 	return nil
 }
@@ -376,12 +376,14 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		ncPtr := s.writeNode(nodePtr)
 		nc := ncPtr.getNode(mm)
 
+		nc.keyPtr.Release(mm)
 		nc.keyPtr = *newBytesFromSlice(mm, k)
+		nc.valPtr.Release(mm)
 		nc.valPtr = vPtr
 		nc.valPtr.Retain(mm)
-		nc.nodePtr = vNode
-		if !nc.nodePtr.isNull() {
-			nc.nodePtr.getNode(mm).Retain()
+		if nc.nodePtr != vNode {
+			nc.nodePtr.NodeRelease(mm)
+			nc.nodePtr = vNode
 		}
 
 		return ncPtr, &oldVal, didUpdate
@@ -401,9 +403,9 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		nn.valPtr = vPtr
 		nn.valPtr.Retain(mm)
 		nn.nodePtr = vNode
-		if !nn.nodePtr.isNull() {
-			nn.nodePtr.getNode(mm).Retain()
-		}
+		// if !nn.nodePtr.isNull() {
+		// 	nn.nodePtr.getNode(mm).Retain()
+		// }
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := s.writeNode(nodePtr)
@@ -460,9 +462,9 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		splitNode.valPtr = vPtr
 		vPtr.Retain(mm)
 		splitNode.nodePtr = vNode
-		if !splitNode.nodePtr.isNull() {
-			splitNode.nodePtr.getNode(mm).Retain()
-		}
+		// if !splitNode.nodePtr.isNull() {
+		// 	splitNode.nodePtr.getNode(mm).Retain()
+		// }
 		return ncPtr, nil, false
 	}
 
@@ -474,9 +476,9 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 	en.valPtr = vPtr
 	vPtr.Retain(mm)
 	en.nodePtr = vNode
-	if !en.nodePtr.isNull() {
-		en.nodePtr.getNode(mm).Retain()
-	}
+	// if !en.nodePtr.isNull() {
+	// 	en.nodePtr.getNode(mm).Retain()
+	// }
 	en.prefixPtr = *newBytesFromSlice(mm, search)
 
 	splitNode.edges[search[0]] = *enPtr
@@ -662,7 +664,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
-	tbl.Node.getNode(mm).Retain()
+	// tbl.Node.getNode(mm).Retain()
 
 	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
 		return fmt.Errorf("Object has to be a pointer")
@@ -696,7 +698,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	objPtr.Release(mm)
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
@@ -1119,8 +1120,9 @@ func (s *Snapshot) RootNode() *Node {
 	return s.Root().getNode(s.db.allocator)
 }
 
-func (s *Snapshot) printTree() {
-	s.RootNode().printTree(s.db.allocator, 0)
+func (s *Snapshot) PrintTree() {
+	fmt.Println("<>")
+	s.RootNode().printTree(s.db.allocator, 0, "", false)
 }
 
 func concat(a, b []byte) []byte {
