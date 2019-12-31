@@ -165,7 +165,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	atomic.AddUint64(&b.header.TotalUsed, pagesNeeded*psize)
 
-	//fmt.Printf("+ allocate %d bytes at %d\n", size, chunkPos)
+	// fmt.Printf("+ allocate %d (%d) bytes at %d\n", size, b.header.TotalUsed, p)
 
 	return p, nil
 }
@@ -181,7 +181,9 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 
 	pagesNeeded := (size + psize - 1) / psize
 
-	atomic.AddUint64(&b.header.TotalUsed, ^uint64(size-1))
+	atomic.AddUint64(&b.header.TotalUsed, ^uint64(pagesNeeded*psize-1))
+
+	// println("++ Freeing ", offset, "size ", size)
 
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -198,8 +200,6 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 		b.header.freePage = p
 		//println("++ Freeing page", b.header.freePage, "link to", *l)
 	}
-
-	//println("done")
 
 	return nil
 }
