@@ -244,6 +244,8 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 
 	v, _ := s.db.encode(tbl)
 	s.InsertWithNode(getTableKey(table), v, tbl.Node)
+	tbl.Node.NodeRelease(s.db.allocator)
+
 	return nil
 }
 
@@ -266,6 +268,7 @@ func (s *Snapshot) CreateIndex(index IndexField) error {
 	}
 	v, _ = s.db.encode(nPtr)
 	s.InsertWithNode(index.getIndexKey(), v, *nPtr)
+	nPtr.NodeRelease(s.db.allocator)
 
 	return nil
 }
@@ -339,6 +342,11 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 		}
 		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
+	}
+
+	if !n.nodePtr.isNull() {
+		nc.nodePtr = n.nodePtr
+		nc.nodePtr.getNode(mm).Retain()
 	}
 
 	s.writable.Add(*ncPtr, nil)
@@ -496,10 +504,13 @@ func (s *Snapshot) mergeChild(n *Node) {
 	n.prefixPtr = *newBytesFromSlice(mm, mergedPrefix)
 	n.keyPtr.Release(mm) // check if needed
 	n.valPtr.Release(mm) // check if needed
+	//n.nodePtr.NodeRelease(mm)
 	n.keyPtr = child.keyPtr
 	n.keyPtr.Retain(mm)
 	n.valPtr = child.valPtr
 	n.valPtr.Retain(mm)
+	n.nodePtr = child.nodePtr
+	n.nodePtr.getNode(mm).Retain()
 
 	n.edges = child.edges
 
@@ -533,6 +544,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		nc := ncPtr.getNode(mm)
 		nc.keyPtr.Release(mm)
 		nc.valPtr.Release(mm)
+		nc.nodePtr.NodeRelease(mm)
 
 		// Check if this node should be merged
 		if *nPtr != s.root && nc.hasOneChild() && parentPtr != nil {
@@ -862,6 +874,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
+		tbl.Node.NodeRelease(mm)
 	}
 
 	// Do the additional indexes
@@ -936,6 +949,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
 			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
+			tPtr.NodeRelease(mm)
 		}
 	}
 
