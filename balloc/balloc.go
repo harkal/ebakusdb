@@ -22,6 +22,8 @@ type MemoryManager interface {
 	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
+
+	GetUsed() uint64
 }
 
 // BufferAllocator allocates memory in a preallocated buffer

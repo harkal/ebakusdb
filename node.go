@@ -18,6 +18,8 @@ type Node struct {
 	// leaf case
 	keyPtr ByteArray
 	valPtr ByteArray
+
+	nodePtr Ptr
 }
 
 var nodeCount int64
@@ -64,9 +66,11 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 			ePtr.NodeRelease(mm)
 		}
 
+		n.nodePtr.NodeRelease(mm)
+
 		size := uint64(unsafe.Sizeof(Node{}))
 		nodeCount--
-		//println("**NODE** Release", *nPtr, nodeCount)
+		// println("**NODE** Release", *nPtr, nodeCount, mm.GetUsed())
 		if err := mm.Deallocate(uint64(*nPtr), size); err != nil {
 			panic(err)
 		}
@@ -78,7 +82,7 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 }
 
 func (n *Node) isLeaf() bool {
-	return !n.keyPtr.isNull()
+	return !n.keyPtr.isNull() || !n.nodePtr.isNull()
 }
 
 func (n *Node) hasOneChild() bool {
@@ -237,6 +241,11 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 		}
 		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
+	}
+
+	if !n.nodePtr.isNull() {
+		nc.nodePtr = n.nodePtr
+		nc.nodePtr.getNode(mm).Retain()
 	}
 
 	t.writable.Add(*ncPtr, nil)
