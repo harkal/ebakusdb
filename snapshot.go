@@ -268,7 +268,6 @@ func (s *Snapshot) CreateIndex(index IndexField) error {
 	}
 	v, _ = s.db.encode(nPtr)
 	s.InsertWithNode(index.getIndexKey(), v, *nPtr)
-	nPtr.NodeRelease(s.db.allocator)
 
 	return nil
 }
@@ -840,7 +839,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
-	//tbl.Node.getNode(mm).Retain()
 
 	k, err := getEncodedIndexKey(reflect.ValueOf(id))
 	if err != nil {
@@ -871,11 +869,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
 		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
-		tbl.Node.NodeRelease(mm)
 	}
 
 	// Do the additional indexes
@@ -892,7 +888,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
 		n := tPtr.getNode(mm)
-		n.Retain()
 
 		fv := oldV.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -946,11 +941,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			oldIVal.Release(mm)
 		}
 		if newRoot != nil {
-			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
 			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
-			tPtr.NodeRelease(mm)
 		}
 	}
 

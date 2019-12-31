@@ -22,6 +22,7 @@ type MemoryManager interface {
 	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
+	GetOffset(p unsafe.Pointer) uint64
 
 	GetUsed() uint64
 }
@@ -122,6 +123,10 @@ func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(b.bufferPtr) + uintptr(pos))
 }
 
+func (b *BufferAllocator) GetOffset(p unsafe.Pointer) uint64 {
+	return uint64(uintptr(p) - uintptr(b.bufferPtr))
+}
+
 var dummy uint64
 
 // Allocate a new buffer of specific size
@@ -165,7 +170,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	atomic.AddUint64(&b.header.TotalUsed, pagesNeeded*psize)
 
-	// fmt.Printf("+ allocate %d (%d) bytes at %d\n", size, b.header.TotalUsed, p)
+	// fmt.Printf("+ allocate %d bytes at %d\n", size, p)
 
 	return p, nil
 }

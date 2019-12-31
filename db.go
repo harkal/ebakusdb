@@ -405,3 +405,8 @@ func (db *DB) SetRootSnapshot(s *Snapshot) {
 	db.header.root = *s.Root()
 	db.header.root.getNode(db.allocator).Retain()
 }
+
+func (db *DB) PrintTree() {
+	fmt.Println("<>")
+	db.header.root.getNode(db.allocator).printTree(db.allocator, 0, "", false)
+}
