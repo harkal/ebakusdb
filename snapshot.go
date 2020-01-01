@@ -789,6 +789,8 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			}
 			if newRoot != nil {
 				tPtr = *newRoot
+				tPtrMarshaled, _ := s.db.encode(tPtr)
+				s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 			}
 		}
 
