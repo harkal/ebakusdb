@@ -155,6 +155,10 @@ type ResultIterator struct {
 	orderClause *OrderField
 }
 
+func (ri *ResultIterator) Release() {
+	ri.iter.Release()
+}
+
 func (ri *ResultIterator) Next(val interface{}) bool {
 	nextIter := func() ([]byte, []byte, bool) {
 		if ri.orderClause.Order == DESC {
