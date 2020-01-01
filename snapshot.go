@@ -244,7 +244,6 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 
 	v, _ := s.db.encode(tbl)
 	s.InsertWithNode(getTableKey(table), v, tbl.Node)
-	//tbl.Node.NodeRelease(s.db.allocator)
 
 	return nil
 }
@@ -452,6 +451,7 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 	nc.edges[edgeLabel].NodeRelease(mm)
 	nc.edges[edgeLabel] = *splitNodePtr
 
+	modChild.prefixPtr.Release(mm)
 	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
 
 	// If the new key is a subset, add to this node
@@ -461,9 +461,6 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		splitNode.valPtr = vPtr
 		vPtr.Retain(mm)
 		splitNode.nodePtr = vNode
-		// if !splitNode.nodePtr.isNull() {
-		// 	splitNode.nodePtr.getNode(mm).Retain()
-		// }
 		return ncPtr, nil, false
 	}
 
@@ -663,7 +660,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
-	// tbl.Node.getNode(mm).Retain()
 
 	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
 		return fmt.Errorf("Object has to be a pointer")
@@ -727,7 +723,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
 		n := tPtr.getNode(mm)
-		n.Retain()
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -793,7 +788,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				oldIVal.Release(mm)
 			}
 			if newRoot != nil {
-				tPtr.NodeRelease(mm)
 				tPtr = *newRoot
 			}
 		}
@@ -816,10 +810,12 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 
 		pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
-		newRoot, _, _ := s.insert(&tPtr, ik, ik, pKeyPtr, 0)
+		newRoot, oldValue, _ := s.insert(&tPtr, ik, ik, pKeyPtr, 0)
+		if oldValue != nil {
+			oldValue.Release(mm)
+		}
 		pKeyPtr.Release(mm)
 		if newRoot != nil {
-			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
 			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
