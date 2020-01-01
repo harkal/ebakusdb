@@ -188,7 +188,7 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 
 	atomic.AddUint64(&b.header.TotalUsed, ^uint64(pagesNeeded*psize-1))
 
-	// println("++ Freeing ", offset, "size ", size)
+	// println("++ Freeing ", size, "at ", offset)
 
 	b.mux.Lock()
 	defer b.mux.Unlock()
