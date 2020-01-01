@@ -1782,13 +1782,35 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	}
 
 	if err := snap.InsertObj(WitnessesTable, &Witness{
-		Id:    1,
+		Id:    0xff,
 		Stake: 2,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.DeleteObj(WitnessesTable, uint8(1)); err != nil {
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0xfe,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0xee,
+		Stake: 1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0xfe)); err != nil {
+		t.Fatal("Failed to delete row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0xff)); err != nil {
+		t.Fatal("Failed to delete row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0)); err != nil {
 		t.Fatal("Failed to delete row error:", err)
 	}
 
@@ -1801,7 +1823,7 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	var w Witness
 
 	found := iter.Next(&w)
-	if !found || w.Id != 0 {
+	if !found || w.Id != 0xee {
 		t.Fatal("Returned wrong row", w, found)
 	}
 
