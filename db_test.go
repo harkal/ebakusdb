@@ -1231,6 +1231,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 	}
 
 	txn := db.GetRootSnapshot()
+
 	txn.CreateTable("PhoneBook", &Phone{})
 
 	txn.CreateIndex(IndexField{
@@ -1745,19 +1746,26 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	}
 
 	type Witness struct {
-		Id    uint64
+		Id    uint8
 		Stake uint64
 	}
 
+	snap := db.GetRootSnapshot()
+
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable, &Witness{})
-	db.CreateIndex(IndexField{
+	snap.CreateTable(WitnessesTable, &Witness{})
+	snap.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
 	})
 
-	snap := db.GetRootSnapshot()
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
 
 	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    1,
@@ -1766,14 +1774,7 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.InsertObj(WitnessesTable, &Witness{
-		Id:    2,
-		Stake: 2,
-	}); err != nil {
-		t.Fatal("Failed to insert row error:", err)
-	}
-
-	if err := snap.DeleteObj(WitnessesTable, uint64(2)); err != nil {
+	if err := snap.DeleteObj(WitnessesTable, uint8(1)); err != nil {
 		t.Fatal("Failed to delete row error:", err)
 	}
 
@@ -1786,12 +1787,18 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	var w Witness
 
 	found := iter.Next(&w)
-	if !found || w.Id != 1 {
+	if !found || w.Id != 0 {
 		t.Fatal("Returned wrong row", w, found)
 	}
 
 	if iter.Next(&w) {
 		t.Fatal("Shouldn't return row", w)
+	}
+
+	snap.Release()
+
+	if db.allocator.GetUsed() != 192 {
+		t.Fatal("incorrect used memory at end", db.allocator.GetUsed())
 	}
 }
 
