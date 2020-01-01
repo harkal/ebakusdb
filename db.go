@@ -368,7 +368,7 @@ func (db *DB) HasTable(table string) bool {
 }
 
 func (db *DB) Iter() *Iterator {
-	iter := db.header.root.getNode(db.allocator).Iterator(db.allocator)
+	iter := db.header.root.getNodeIterator(db.allocator)
 	return iter
 }
 
@@ -404,4 +404,9 @@ func (db *DB) SetRootSnapshot(s *Snapshot) {
 	db.header.root.NodeRelease(db.allocator)
 	db.header.root = *s.Root()
 	db.header.root.getNode(db.allocator).Retain()
+}
+
+func (db *DB) PrintTree() {
+	fmt.Println("<>")
+	db.header.root.getNode(db.allocator).printTree(db.allocator, 0, "", false)
 }

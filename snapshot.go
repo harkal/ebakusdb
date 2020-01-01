@@ -243,7 +243,8 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 	tbl.Indexes = append(tbl.Indexes, "Id")
 
 	v, _ := s.db.encode(tbl)
-	s.Insert(getTableKey(table), v)
+	s.InsertWithNode(getTableKey(table), v, tbl.Node)
+
 	return nil
 }
 
@@ -258,14 +259,14 @@ func (s *Snapshot) CreateIndex(index IndexField) error {
 	tbl.Indexes = append(tbl.Indexes, index.Field)
 
 	v, _ := s.db.encode(tbl)
-	s.Insert(getTableKey(index.Table), v)
+	s.InsertWithNode(getTableKey(index.Table), v, tbl.Node)
 
 	nPtr, _, err := newNode(s.db.allocator)
 	if err != nil {
 		return err
 	}
 	v, _ = s.db.encode(nPtr)
-	s.Insert(index.getIndexKey(), v)
+	s.InsertWithNode(index.getIndexKey(), v, *nPtr)
 
 	return nil
 }
@@ -277,7 +278,7 @@ func (s *Snapshot) HasTable(table string) bool {
 }
 
 func (s *Snapshot) Iter() *Iterator {
-	iter := s.root.getNode(s.db.allocator).Iterator(s.db.allocator)
+	iter := s.root.getNodeIterator(s.db.allocator)
 	return iter
 }
 
@@ -341,12 +342,17 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 		edgeNode.getNode(mm).Retain()
 	}
 
+	if !n.nodePtr.isNull() {
+		nc.nodePtr = n.nodePtr
+		nc.nodePtr.getNode(mm).Retain()
+	}
+
 	s.writable.Add(*ncPtr, nil)
 
 	return ncPtr
 }
 
-func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *ByteArray, bool) {
+func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode Ptr) (*Ptr, *ByteArray, bool) {
 	if err := vPtr.checkBytesLength(); err != nil {
 		return nil, nil, false
 	}
@@ -368,9 +374,15 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 		ncPtr := s.writeNode(nodePtr)
 		nc := ncPtr.getNode(mm)
 
+		nc.keyPtr.Release(mm)
 		nc.keyPtr = *newBytesFromSlice(mm, k)
+		nc.valPtr.Release(mm)
 		nc.valPtr = vPtr
 		nc.valPtr.Retain(mm)
+		if nc.nodePtr != vNode {
+			nc.nodePtr.NodeRelease(mm)
+			nc.nodePtr = vNode
+		}
 
 		return ncPtr, &oldVal, didUpdate
 	}
@@ -388,6 +400,10 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 		nn.keyPtr = *newBytesFromSlice(mm, k)
 		nn.valPtr = vPtr
 		nn.valPtr.Retain(mm)
+		nn.nodePtr = vNode
+		// if !nn.nodePtr.isNull() {
+		// 	nn.nodePtr.getNode(mm).Retain()
+		// }
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := s.writeNode(nodePtr)
@@ -403,7 +419,7 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	commonPrefix := longestPrefix(search, childPrefix)
 	if commonPrefix == len(childPrefix) {
 		search = search[commonPrefix:]
-		newChildPtr, oldVal, didUpdate := s.insert(&childPtr, k, search, vPtr)
+		newChildPtr, oldVal, didUpdate := s.insert(&childPtr, k, search, vPtr, vNode)
 		if newChildPtr != nil {
 			ncPtr := s.writeNode(nodePtr)
 			nc := ncPtr.getNode(mm)
@@ -435,6 +451,7 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	nc.edges[edgeLabel].NodeRelease(mm)
 	nc.edges[edgeLabel] = *splitNodePtr
 
+	modChild.prefixPtr.Release(mm)
 	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
 
 	// If the new key is a subset, add to this node
@@ -443,6 +460,7 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 		splitNode.keyPtr = *newBytesFromSlice(mm, k)
 		splitNode.valPtr = vPtr
 		vPtr.Retain(mm)
+		splitNode.nodePtr = vNode
 		return ncPtr, nil, false
 	}
 
@@ -453,6 +471,10 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr,
 	en.keyPtr = *newBytesFromSlice(mm, k)
 	en.valPtr = vPtr
 	vPtr.Retain(mm)
+	en.nodePtr = vNode
+	// if !en.nodePtr.isNull() {
+	// 	en.nodePtr.getNode(mm).Retain()
+	// }
 	en.prefixPtr = *newBytesFromSlice(mm, search)
 
 	splitNode.edges[search[0]] = *enPtr
@@ -480,10 +502,13 @@ func (s *Snapshot) mergeChild(n *Node) {
 	n.prefixPtr = *newBytesFromSlice(mm, mergedPrefix)
 	n.keyPtr.Release(mm) // check if needed
 	n.valPtr.Release(mm) // check if needed
+	//n.nodePtr.NodeRelease(mm)
 	n.keyPtr = child.keyPtr
 	n.keyPtr.Retain(mm)
 	n.valPtr = child.valPtr
 	n.valPtr.Retain(mm)
+	n.nodePtr = child.nodePtr
+	n.nodePtr.getNode(mm).Retain()
 
 	n.edges = child.edges
 
@@ -517,6 +542,7 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 		nc := ncPtr.getNode(mm)
 		nc.keyPtr.Release(mm)
 		nc.valPtr.Release(mm)
+		nc.nodePtr.NodeRelease(mm)
 
 		// Check if this node should be merged
 		if *nPtr != s.root && nc.hasOneChild() && parentPtr != nil {
@@ -566,6 +592,10 @@ func (s *Snapshot) delete(parentPtr, nPtr *Ptr, search []byte) (*Ptr, *ByteArray
 }
 
 func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
+	return s.InsertWithNode(k, v, 0)
+}
+
+func (s *Snapshot) InsertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
 	if err := checkBytesLength(v); err != nil {
 		return nil, false
 	}
@@ -577,7 +607,7 @@ func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 
 	s.writer.Lock()
 
-	newRoot, oldVal, didUpdate := s.insert(&s.root, k, k, vPtr)
+	newRoot, oldVal, didUpdate := s.insert(&s.root, k, k, vPtr, vp)
 	if newRoot != nil {
 		s.root.NodeRelease(mm)
 		s.root = *newRoot
@@ -630,7 +660,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
-	tbl.Node.getNode(mm).Retain()
 
 	if reflect.Ptr != reflect.TypeOf(obj).Kind() {
 		return fmt.Errorf("Object has to be a pointer")
@@ -660,14 +689,13 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	ek := encodeKey(k)
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
-	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr)
+	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr, 0)
 	objPtr.Release(mm)
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
-		s.Insert(getTableKey(table), tblMarshaled)
+		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
 	}
 
 	var oldV reflect.Value
@@ -695,7 +723,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
 		n := tPtr.getNode(mm)
-		n.Retain()
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -749,7 +776,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				}
 
 				pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
-				newRoot, oldIVal, _ = s.insert(&tPtr, oldIk, oldIk, pKeyPtr)
+				newRoot, oldIVal, _ = s.insert(&tPtr, oldIk, oldIk, pKeyPtr, 0)
 				pKeyPtr.Release(mm)
 
 				// When single entry, remove the node
@@ -761,8 +788,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 				oldIVal.Release(mm)
 			}
 			if newRoot != nil {
-				tPtr.NodeRelease(mm)
 				tPtr = *newRoot
+				tPtrMarshaled, _ := s.db.encode(tPtr)
+				s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 			}
 		}
 
@@ -784,13 +812,15 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 
 		pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
-		newRoot, _, _ := s.insert(&tPtr, ik, ik, pKeyPtr)
+		newRoot, oldValue, _ := s.insert(&tPtr, ik, ik, pKeyPtr, 0)
+		if oldValue != nil {
+			oldValue.Release(mm)
+		}
 		pKeyPtr.Release(mm)
 		if newRoot != nil {
-			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
-			s.Insert(ifield.getIndexKey(), tPtrMarshaled)
+			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 		}
 	}
 
@@ -807,7 +837,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
-	tbl.Node.getNode(mm).Retain()
 
 	k, err := getEncodedIndexKey(reflect.ValueOf(id))
 	if err != nil {
@@ -838,10 +867,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 
 	if newRoot != nil {
-		tbl.Node.NodeRelease(mm)
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
-		s.Insert(getTableKey(table), tblMarshaled)
+		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
 	}
 
 	// Do the additional indexes
@@ -858,7 +886,6 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
 		n := tPtr.getNode(mm)
-		n.Retain()
 
 		fv := oldV.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -900,7 +927,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			}
 
 			pKeyPtr := *newBytesFromSlice(mm, ivMarshaled)
-			newRoot, oldIVal, _ = s.insert(&tPtr, ik, ik, pKeyPtr)
+			newRoot, oldIVal, _ = s.insert(&tPtr, ik, ik, pKeyPtr, 0)
 			pKeyPtr.Release(mm)
 
 			// When single entry, remove the node
@@ -912,10 +939,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			oldIVal.Release(mm)
 		}
 		if newRoot != nil {
-			tPtr.NodeRelease(mm)
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
-			s.Insert(ifield.getIndexKey(), tPtrMarshaled)
+			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 		}
 	}
 
@@ -1054,8 +1080,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}
 
 	if orderClause.Field == "Id" {
-		iter = tbl.Node.getNode(s.db.allocator).Iterator(s.db.allocator)
-
+		iter = tbl.Node.getNodeIterator(s.db.allocator)
 	} else {
 		ifield := IndexField{Table: table, Field: orderClause.Field}
 		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
@@ -1064,7 +1089,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		iter = tPtr.getNode(s.db.allocator).Iterator(s.db.allocator)
+		iter = tPtr.getNodeIterator(s.db.allocator)
 
 		tblNode = tbl.Node.getNode(s.db.allocator)
 	}
@@ -1086,8 +1111,9 @@ func (s *Snapshot) RootNode() *Node {
 	return s.Root().getNode(s.db.allocator)
 }
 
-func (s *Snapshot) printTree() {
-	s.RootNode().printTree(s.db.allocator, 0)
+func (s *Snapshot) PrintTree() {
+	fmt.Println("<>")
+	s.RootNode().printTree(s.db.allocator, 0, "", false)
 }
 
 func concat(a, b []byte) []byte {

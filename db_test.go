@@ -1231,6 +1231,7 @@ func Test_TablesUpdateIndexes(t *testing.T) {
 	}
 
 	txn := db.GetRootSnapshot()
+
 	txn.CreateTable("PhoneBook", &Phone{})
 
 	txn.CreateIndex(IndexField{
@@ -1586,8 +1587,9 @@ func Test_InsertLookupPrefixAfterMergeOnParentTableNodeForEmptyIdValue(t *testin
 
 	const DelegationsTable string = "Delegations"
 
-	db.CreateTable(DelegationsTable, &Delegation{})
 	snap := db.GetRootSnapshot()
+
+	snap.CreateTable(DelegationsTable, &Delegation{})
 
 	p1 := []byte{20}
 	p2 := []byte{}
@@ -1686,6 +1688,12 @@ func Test_InsertLookupPrefixAfterMergeOnParentTableNodeForEmptyIdValue(t *testin
 	if found := iter.Next(&d); found {
 		t.Fatal("Found more rows", found, d)
 	}
+
+	snap.Release()
+
+	if db.allocator.GetUsed() != 192 {
+		t.Fatal("incorrect used memory at end", db.allocator.GetUsed())
+	}
 }
 
 func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
@@ -1701,8 +1709,9 @@ func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
 
 	const DelegationsTable string = "Delegations"
 
-	db.CreateTable(DelegationsTable, &Delegation{})
 	snap := db.GetRootSnapshot()
+
+	snap.CreateTable(DelegationsTable, &Delegation{})
 
 	p1 := [2]byte{1, 20}
 	p2 := [2]byte{20, 1}
@@ -1735,6 +1744,12 @@ func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
 	if iter.Next(&d) {
 		t.Fatal("Found rows", d)
 	}
+
+	snap.Release()
+
+	if db.allocator.GetUsed() != 192 {
+		t.Fatal("incorrect used memory at end", db.allocator.GetUsed())
+	}
 }
 
 func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
@@ -1745,35 +1760,57 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	}
 
 	type Witness struct {
-		Id    uint64
+		Id    uint8
 		Stake uint64
 	}
 
+	snap := db.GetRootSnapshot()
+
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable, &Witness{})
-	db.CreateIndex(IndexField{
+	snap.CreateTable(WitnessesTable, &Witness{})
+	snap.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
 	})
 
-	snap := db.GetRootSnapshot()
-
 	if err := snap.InsertObj(WitnessesTable, &Witness{
-		Id:    1,
+		Id:    0,
 		Stake: 2,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
 	if err := snap.InsertObj(WitnessesTable, &Witness{
-		Id:    2,
+		Id:    0xff,
 		Stake: 2,
 	}); err != nil {
 		t.Fatal("Failed to insert row error:", err)
 	}
 
-	if err := snap.DeleteObj(WitnessesTable, uint64(2)); err != nil {
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0xfe,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0xee,
+		Stake: 1,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0xfe)); err != nil {
+		t.Fatal("Failed to delete row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0xff)); err != nil {
+		t.Fatal("Failed to delete row error:", err)
+	}
+
+	if err := snap.DeleteObj(WitnessesTable, uint8(0)); err != nil {
 		t.Fatal("Failed to delete row error:", err)
 	}
 
@@ -1786,12 +1823,18 @@ func Test_TablesDeleteIndexesWithSameValue(t *testing.T) {
 	var w Witness
 
 	found := iter.Next(&w)
-	if !found || w.Id != 1 {
+	if !found || w.Id != 0xee {
 		t.Fatal("Returned wrong row", w, found)
 	}
 
 	if iter.Next(&w) {
 		t.Fatal("Shouldn't return row", w)
+	}
+
+	snap.Release()
+
+	if db.allocator.GetUsed() != 192 {
+		t.Fatal("incorrect used memory at end", db.allocator.GetUsed())
 	}
 }
 
@@ -1809,13 +1852,13 @@ func Test_TablesUpdateIndexesWithSameValue(t *testing.T) {
 
 	const WitnessesTable string = "Witnesses"
 
-	db.CreateTable(WitnessesTable, &Witness{})
-	db.CreateIndex(IndexField{
+	snap := db.GetRootSnapshot()
+
+	snap.CreateTable(WitnessesTable, &Witness{})
+	snap.CreateIndex(IndexField{
 		Table: WitnessesTable,
 		Field: "Stake",
 	})
-
-	snap := db.GetRootSnapshot()
 
 	if err := snap.InsertObj(WitnessesTable, &Witness{
 		Id:    1,
@@ -1858,6 +1901,12 @@ func Test_TablesUpdateIndexesWithSameValue(t *testing.T) {
 
 	if ws[1] != 3 || ws[2] != 2 {
 		t.Fatal("Wrong entries", ws)
+	}
+
+	snap.Release()
+
+	if db.allocator.GetUsed() != 192 {
+		t.Fatal("incorrect used memory at end", db.allocator.GetUsed())
 	}
 }
 

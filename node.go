@@ -18,6 +18,8 @@ type Node struct {
 	// leaf case
 	keyPtr ByteArray
 	valPtr ByteArray
+
+	nodePtr Ptr
 }
 
 var nodeCount int64
@@ -45,6 +47,10 @@ func (p *Ptr) getNode(mm balloc.MemoryManager) *Node {
 	return (*Node)(mm.GetPtr(uint64(*p)))
 }
 
+func (p *Ptr) getNodeIterator(mm balloc.MemoryManager) *Iterator {
+	return &Iterator{rootNode: *p, node: *p, mm: mm}
+}
+
 func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 	if *nPtr == 0 {
 		return false
@@ -60,9 +66,11 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 			ePtr.NodeRelease(mm)
 		}
 
+		n.nodePtr.NodeRelease(mm)
+
 		size := uint64(unsafe.Sizeof(Node{}))
 		nodeCount--
-		//println("**NODE** Release", *nPtr, nodeCount)
+		// println("**NODE** Release", *nPtr, nodeCount, mm.GetUsed())
 		if err := mm.Deallocate(uint64(*nPtr), size); err != nil {
 			panic(err)
 		}
@@ -74,7 +82,7 @@ func (nPtr *Ptr) NodeRelease(mm balloc.MemoryManager) bool {
 }
 
 func (n *Node) isLeaf() bool {
-	return !n.keyPtr.isNull()
+	return !n.keyPtr.isNull() || !n.nodePtr.isNull()
 }
 
 func (n *Node) hasOneChild() bool {
@@ -165,27 +173,71 @@ func (n *Node) LongestPrefix(db *DB, k []byte) ([]byte, interface{}, bool) {
 	return nil, nil, false
 }
 
-func (n *Node) Iterator(mm balloc.MemoryManager) *Iterator {
-	return &Iterator{rootNode: n, node: n, mm: mm}
-}
+func (n *Node) printTree(mm balloc.MemoryManager, child int, indent string, last bool) {
+	fmt.Printf(indent)
 
-func (n *Node) printTree(mm balloc.MemoryManager, ident int) {
-	fmt.Printf("%*s", ident, "")
-	fmt.Printf("Prefix: (%s) ", safeStringFromEncoded(n.prefixPtr.getBytes(mm)))
-	if n.isLeaf() {
-		fmt.Printf("%*s", ident, "")
-		fmt.Printf("Key: (%s) Value: (%s) ", string(decodeKey(n.keyPtr.getBytes(mm))), string(n.valPtr.getBytes(mm)))
+	if last {
+		fmt.Printf("\\-(%d)", child)
+		indent += "  "
+	} else {
+		fmt.Printf("|-(%d)", child)
+		indent += "| "
 	}
-	fmt.Printf("Refs: %d\n", n.refCount)
-	for label, edgeNodePtr := range n.edges {
+
+	fmt.Printf("[%d] Prefix: (%s) Refs: %d ", mm.GetOffset(unsafe.Pointer(n)), safeStringFromEncoded(n.prefixPtr.getBytes(mm)), n.refCount)
+
+	if n.isLeaf() {
+		fmt.Printf(" Key[%d]: (%s)[%d] Value[%d]: (%s)[%d] ",
+			n.keyPtr,
+			string(decodeKey(n.keyPtr.getBytes(mm))),
+			*n.keyPtr.getBytesRefCount(mm),
+			n.valPtr,
+			string(n.valPtr.getBytes(mm)),
+			*n.valPtr.getBytesRefCount(mm))
+	}
+
+	fmt.Println("")
+
+	lastIndex := 16
+	for i := 15; i >= 0; i-- {
+		if !n.edges[i].isNull() {
+			lastIndex = i
+			break
+		}
+	}
+
+	i := 0
+	for _, edgeNodePtr := range n.edges {
+		i++
 		if edgeNodePtr.isNull() {
 			continue
 		}
-		fmt.Printf("%*s", ident+4, "")
-		fmt.Printf("Edge %d (%d):\n", label, edgeNodePtr)
+
 		edgeNode := edgeNodePtr.getNode(mm)
-		edgeNode.printTree(mm, ident+8)
+		edgeNode.printTree(mm, i, indent, i-1 == lastIndex)
 	}
+
+	if !n.nodePtr.isNull() {
+		edgeNode := n.nodePtr.getNode(mm)
+		edgeNode.printTree(mm, -1, indent, true)
+	}
+
+	// fmt.Printf("%*s", ident, "")
+	// fmt.Printf("Prefix: (%s) ", safeStringFromEncoded(n.prefixPtr.getBytes(mm)))
+	// if n.isLeaf() {
+	// 	fmt.Printf("%*s", ident, "")
+	// 	fmt.Printf("Key: (%s) Value: (%s) ", string(decodeKey(n.keyPtr.getBytes(mm))), string(n.valPtr.getBytes(mm)))
+	// }
+	// fmt.Printf("Refs: %d\n", n.refCount)
+	// for label, edgeNodePtr := range n.edges {
+	// 	if edgeNodePtr.isNull() {
+	// 		continue
+	// 	}
+	// 	fmt.Printf("%*s", ident+4, "")
+	// 	fmt.Printf("Edge %d (%d):\n", label, edgeNodePtr)
+	// 	edgeNode := edgeNodePtr.getNode(mm)
+	// 	edgeNode.printTree(mm, ident+8)
+	// }
 }
 
 const defaultWritableCache = 8192
@@ -237,6 +289,11 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 		}
 		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
 		edgeNode.getNode(mm).Retain()
+	}
+
+	if !n.nodePtr.isNull() {
+		nc.nodePtr = n.nodePtr
+		nc.nodePtr.getNode(mm).Retain()
 	}
 
 	t.writable.Add(*ncPtr, nil)
@@ -517,7 +574,7 @@ func (t *Txn) RootNode() *Node {
 }
 
 func (t *Txn) printTree() {
-	t.RootNode().printTree(t.db.allocator, 0)
+	t.RootNode().printTree(t.db.allocator, 0, "", false)
 }
 
 // Get returns the key

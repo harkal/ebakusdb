@@ -22,6 +22,9 @@ type MemoryManager interface {
 	Deallocate(pos, size uint64) error
 
 	GetPtr(pos uint64) unsafe.Pointer
+	GetOffset(p unsafe.Pointer) uint64
+
+	GetUsed() uint64
 }
 
 // BufferAllocator allocates memory in a preallocated buffer
@@ -120,6 +123,10 @@ func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(b.bufferPtr) + uintptr(pos))
 }
 
+func (b *BufferAllocator) GetOffset(p unsafe.Pointer) uint64 {
+	return uint64(uintptr(p) - uintptr(b.bufferPtr))
+}
+
 var dummy uint64
 
 // Allocate a new buffer of specific size
@@ -163,7 +170,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	atomic.AddUint64(&b.header.TotalUsed, pagesNeeded*psize)
 
-	//fmt.Printf("+ allocate %d bytes at %d\n", size, chunkPos)
+	// fmt.Printf("+ allocate %d bytes at %d\n", size, p)
 
 	return p, nil
 }
@@ -179,7 +186,9 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 
 	pagesNeeded := (size + psize - 1) / psize
 
-	atomic.AddUint64(&b.header.TotalUsed, ^uint64(size-1))
+	atomic.AddUint64(&b.header.TotalUsed, ^uint64(pagesNeeded*psize-1))
+
+	// println("++ Freeing ", size, "at ", offset)
 
 	b.mux.Lock()
 	defer b.mux.Unlock()
@@ -196,8 +205,6 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 		b.header.freePage = p
 		//println("++ Freeing page", b.header.freePage, "link to", *l)
 	}
-
-	//println("done")
 
 	return nil
 }
