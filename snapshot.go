@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -184,9 +185,23 @@ type Snapshot struct {
 	db   *DB
 	root Ptr
 
+	objAllocated int64
+
 	writable *simplelru.LRU
 
 	writer sync.Mutex
+}
+
+func (s *Snapshot) GetObjAllocated() int64 {
+	return atomic.LoadInt64(&s.objAllocated)
+}
+
+func (s *Snapshot) ResetObjAllocated() {
+	atomic.StoreInt64(&s.objAllocated, 0)
+}
+
+func (s *Snapshot) addObjAllocated(count int) {
+	atomic.AddInt64(&s.objAllocated, int64(count))
 }
 
 func (s *Snapshot) Release() {
@@ -674,6 +689,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	}
 	ek := encodeKey(k)
 
+	s.addObjAllocated(len(objMarshaled))
+	s.addObjAllocated(len(k))
+
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
 	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr, 0)
 	objPtr.Release(mm)
@@ -729,6 +747,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			if err != nil {
 				return err
 			}
+			s.addObjAllocated(-len(oldIk))
 			oldIk = encodeKey(oldIk)
 
 			oldUKeys := make([][]byte, 0)
@@ -783,6 +802,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		if err != nil {
 			return err
 		}
+
+		s.addObjAllocated(len(ik))
+
 		ik = encodeKey(ik)
 
 		oldKeys := make([][]byte, 0)
@@ -829,10 +851,14 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	}
 	ek := encodeKey(k)
 
+	s.addObjAllocated(-len(k))
+
 	newRoot, oldVal := s.delete(nil, &tbl.Node, ek)
 	if oldVal != nil {
 		defer oldVal.Release(mm)
+		s.addObjAllocated(-int(oldVal.Size))
 	}
+
 	var oldV reflect.Value
 	if len(tbl.Indexes) > 1 {
 		if oldVal == nil {
@@ -878,10 +904,10 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		}
 
 		ik, err := getEncodedIndexKey(fv)
-
 		if err != nil {
 			return err
 		}
+		s.addObjAllocated(-len(ik))
 		ik = encodeKey(ik)
 
 		oldKeys := make([][]byte, 0)
@@ -900,6 +926,8 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 				if bytes.Equal(k, v) {
 					oldKeys = append(oldKeys[:i], oldKeys[i+1:]...)
 					found = true
+					okMar, _ := s.db.encode(oldKeys[i])
+					s.addObjAllocated(-len(okMar))
 				}
 			}
 			if !found {
