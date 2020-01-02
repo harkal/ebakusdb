@@ -1,8 +1,6 @@
 package ebakusdb
 
-import (
-	"sync/atomic"
-)
+import "sync/atomic"
 
 type Ptr uint64
 

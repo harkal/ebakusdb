@@ -47,6 +47,14 @@ func (p *Ptr) getNode(mm balloc.MemoryManager) *Node {
 	return (*Node)(mm.GetPtr(uint64(*p)))
 }
 
+func (p *Ptr) NodeRetain(mm balloc.MemoryManager) bool {
+	if *p == 0 {
+		return false
+	}
+	p.getNode(mm).Retain()
+	return true
+}
+
 func (p *Ptr) getNodeIterator(mm balloc.MemoryManager) *Iterator {
 	return &Iterator{rootNode: *p, node: *p, mm: mm}
 }
@@ -284,16 +292,12 @@ func (t *Txn) writeNode(nodePtr *Ptr) *Ptr {
 	nc.edges = n.edges
 
 	for _, edgeNode := range nc.edges {
-		if edgeNode.isNull() {
-			continue
-		}
-		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
-		edgeNode.getNode(mm).Retain()
+		edgeNode.NodeRetain(mm)
 	}
 
 	if !n.nodePtr.isNull() {
 		nc.nodePtr = n.nodePtr
-		nc.nodePtr.getNode(mm).Retain()
+		nc.nodePtr.NodeRetain(mm)
 	}
 
 	t.writable.Add(*ncPtr, nil)
@@ -346,7 +350,6 @@ func (t *Txn) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray) (*Ptr, *Byt
 
 		nc := t.writeNode(nodePtr)
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
-		//nnPtr.getNode(mm).Retain()
 		return nc, nil, false
 	}
 
@@ -434,11 +437,7 @@ func (t *Txn) mergeChild(n *Node) {
 	n.edges = child.edges
 
 	for _, edgeNode := range n.edges {
-		if edgeNode.isNull() {
-			continue
-		}
-		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
-		edgeNode.getNode(mm).Retain()
+		edgeNode.NodeRetain(mm)
 	}
 
 	childPtr.NodeRelease(mm)

@@ -335,16 +335,12 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 	nc.edges = n.edges
 
 	for _, edgeNode := range nc.edges {
-		if edgeNode.isNull() {
-			continue
-		}
-		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
-		edgeNode.getNode(mm).Retain()
+		edgeNode.NodeRetain(mm)
 	}
 
 	if !n.nodePtr.isNull() {
 		nc.nodePtr = n.nodePtr
-		nc.nodePtr.getNode(mm).Retain()
+		nc.nodePtr.NodeRetain(mm)
 	}
 
 	s.writable.Add(*ncPtr, nil)
@@ -401,14 +397,11 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		nn.valPtr = vPtr
 		nn.valPtr.Retain(mm)
 		nn.nodePtr = vNode
-		// if !nn.nodePtr.isNull() {
-		// 	nn.nodePtr.getNode(mm).Retain()
-		// }
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := s.writeNode(nodePtr)
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
-		//nnPtr.getNode(mm).Retain()
+
 		return nc, nil, false
 	}
 
@@ -472,9 +465,6 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 	en.valPtr = vPtr
 	vPtr.Retain(mm)
 	en.nodePtr = vNode
-	// if !en.nodePtr.isNull() {
-	// 	en.nodePtr.getNode(mm).Retain()
-	// }
 	en.prefixPtr = *newBytesFromSlice(mm, search)
 
 	splitNode.edges[search[0]] = *enPtr
@@ -508,16 +498,12 @@ func (s *Snapshot) mergeChild(n *Node) {
 	n.valPtr = child.valPtr
 	n.valPtr.Retain(mm)
 	n.nodePtr = child.nodePtr
-	n.nodePtr.getNode(mm).Retain()
+	n.nodePtr.NodeRetain(mm)
 
 	n.edges = child.edges
 
 	for _, edgeNode := range n.edges {
-		if edgeNode.isNull() {
-			continue
-		}
-		//fmt.Printf("Ref node %d with refs: %d\n", edgeNode, edgeNode.getNode(mm).refCount)
-		edgeNode.getNode(mm).Retain()
+		edgeNode.NodeRetain(mm)
 	}
 
 	childPtr.NodeRelease(mm)
