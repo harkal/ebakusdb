@@ -708,7 +708,6 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		n := tPtr.getNode(mm)
 
 		fv := v.FieldByName(indexField)
 		if !fv.IsValid() {
@@ -733,7 +732,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			oldIk = encodeKey(oldIk)
 
 			oldUKeys := make([][]byte, 0)
-			oldUKeysMarshalled, found := n.Get(s.db, oldIk)
+			oldUKeysMarshalled, found := tPtr.getNode(mm).Get(s.db, oldIk)
 			if found {
 				s.db.decode(*oldUKeysMarshalled, &oldUKeys)
 			}
@@ -787,7 +786,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		ik = encodeKey(ik)
 
 		oldKeys := make([][]byte, 0)
-		oldKeysMarshalled, found := n.Get(s.db, ik)
+		oldKeysMarshalled, found := tPtr.getNode(mm).Get(s.db, ik)
 		if found {
 			s.db.decode(*oldKeysMarshalled, &oldKeys)
 		}
