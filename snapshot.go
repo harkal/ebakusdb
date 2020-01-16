@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -651,6 +652,21 @@ func (s *Snapshot) Delete(k []byte) bool {
 	return false
 }
 
+func compKeys(a []byte, b []byte) bool {
+	l := len(a)
+	if l > len(b) {
+		l = len(b)
+	}
+	for i := 0; i < l; i++ {
+		if a[i] > b[i] {
+			return true
+		} else if a[i] > b[i] {
+			return false
+		}
+	}
+	return false
+}
+
 func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	tPtrMarshaled, found := s.Get(getTableKey(table))
 	if found == false {
@@ -774,6 +790,11 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 					return fmt.Errorf("Indexed key not found in old position")
 				}
 
+				// Order by primary key internaly
+				sort.Slice(uKeys, func(i, j int) bool {
+					return compKeys(uKeys[i], uKeys[j])
+				})
+
 				ivMarshaled, err := s.db.encode(uKeys)
 				if err != nil {
 					return err
@@ -812,7 +833,14 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		if found {
 			s.db.decode(*oldKeysMarshalled, &oldKeys)
 		}
+
 		keys := append(oldKeys, k)
+
+		// Order by primary key internaly
+		sort.Slice(keys, func(i, j int) bool {
+			return compKeys(keys[i], keys[j])
+		})
+
 		ivMarshaled, err := s.db.encode(keys)
 		if err != nil {
 			return err
@@ -933,6 +961,11 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 			if !found {
 				return fmt.Errorf("Key to be deleted not found")
 			}
+
+			// Order by primary key internaly
+			sort.Slice(oldKeys, func(i, j int) bool {
+				return compKeys(oldKeys[i], oldKeys[j])
+			})
 
 			ivMarshaled, err := s.db.encode(oldKeys)
 			if err != nil {
