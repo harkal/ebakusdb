@@ -2,6 +2,7 @@ package ebakusdb
 
 import (
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"unsafe"
 
@@ -32,7 +33,7 @@ func newBytes(mm balloc.MemoryManager, size uint32) (*ByteArray, []byte, error) 
 func newBytesFromSlice(mm balloc.MemoryManager, data []byte) *ByteArray {
 	aPtr, a, err := newBytes(mm, uint32(len(data)))
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("%s (allocating: %d bytes, used: %d, free: %d)", err, len(data), mm.GetUsed(), mm.GetFree()))
 	}
 	copy(a, data)
 
