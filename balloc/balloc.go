@@ -25,6 +25,7 @@ type MemoryManager interface {
 	GetOffset(p unsafe.Pointer) uint64
 
 	GetUsed() uint64
+	GetFree() uint64
 }
 
 // BufferAllocator allocates memory in a preallocated buffer
