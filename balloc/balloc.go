@@ -108,7 +108,9 @@ func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, first
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
-	return b.bufferSize - atomic.LoadUint64(&b.header.TotalUsed)
+	b.mux.Lock()
+	defer b.mux.Unlock()
+	return b.bufferSize - b.header.dataWatermark
 }
 
 func (b *BufferAllocator) GetUsed() uint64 {

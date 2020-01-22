@@ -2291,15 +2291,15 @@ func Test_ByteArrayRefCounting(t *testing.T) {
 		t.Fatal("Bad ref count")
 	}
 
-	free := db.allocator.GetFree()
+	used := db.allocator.GetUsed()
 	b2Ptr.Release(mm)
-	if db.allocator.GetFree() <= free {
+	if db.allocator.GetUsed() > used {
 		t.Fatal("Failed to release")
 	}
 
-	free = db.allocator.GetFree()
+	used = db.allocator.GetUsed()
 	bPtr.Release(mm)
-	if db.allocator.GetFree() != free {
+	if db.allocator.GetUsed() > used {
 		t.Fatal("Failed to release")
 	}
 }

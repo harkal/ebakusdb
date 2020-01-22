@@ -10,13 +10,13 @@ import (
 func Test_CreateBuffer(t *testing.T) {
 	buffer := make([]byte, 1024*1024) // 1MB
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
 
 	buffer2 := make([]byte, 1024*1024+1)
-	ba, err = balloc.NewBufferAllocator(unsafe.Pointer(&buffer2[0]), uint64(len(buffer2)), 0)
+	ba, err = balloc.NewBufferAllocator(unsafe.Pointer(&buffer2[0]), uint64(len(buffer2)), 0, 128)
 	if err != balloc.ErrInvalidSize {
 		t.Fatal("Should not accept unaligned size")
 	}
@@ -26,7 +26,7 @@ func Test_Allocate(t *testing.T) {
 	totalSpace := uint64(1024 * 1024) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -53,7 +53,7 @@ func Test_AllocateDeallocate(t *testing.T) {
 	totalSpace := uint64(1024 * 1024) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -70,17 +70,17 @@ func Test_AllocateDeallocate(t *testing.T) {
 
 	ba.PrintFreeChunks()
 
-	if err := ba.Deallocate(ps[0]); err != nil {
+	if err := ba.Deallocate(ps[0], 128); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
 	ba.PrintFreeChunks()
 
-	if err := ba.Deallocate(ps[1]); err != nil {
+	if err := ba.Deallocate(ps[1], 128); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
-	if err := ba.Deallocate(ps[3]); err != nil {
+	if err := ba.Deallocate(ps[3], 128); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
@@ -107,7 +107,7 @@ func Test_AllocateGrow(t *testing.T) {
 	totalSpace := uint64(1024 + 48) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -147,7 +147,7 @@ func Test_Alignment(t *testing.T) {
 	totalSpace := uint64(1024 * 1024) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -185,7 +185,7 @@ func Test_DeallocateAligned(t *testing.T) {
 	totalSpace := uint64(1024 * 1024) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -195,7 +195,7 @@ func Test_DeallocateAligned(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
-	ba.Deallocate(p1)
+	ba.Deallocate(p1, 16)
 	if ba.GetFree() < free {
 		t.Fatal("Incorrect free space")
 	}
@@ -205,7 +205,7 @@ func Test_DeallocateMissaligned(t *testing.T) {
 	totalSpace := uint64(1024 * 1024) // 1MB
 	buffer := make([]byte, totalSpace)
 
-	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0)
+	ba, err := balloc.NewBufferAllocator(unsafe.Pointer(&buffer[0]), uint64(len(buffer)), 0, 128)
 	if err != nil || ba == nil {
 		t.Fatal("failed to create buffer")
 	}
@@ -215,7 +215,7 @@ func Test_DeallocateMissaligned(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to allocate 10 bytes")
 	}
-	ba.Deallocate(p1)
+	ba.Deallocate(p1, 15)
 	if ba.GetFree() < free {
 		t.Fatal("Incorrect free space")
 	}
