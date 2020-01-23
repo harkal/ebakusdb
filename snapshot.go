@@ -630,7 +630,7 @@ func (s *Snapshot) InsertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
 	copy(oVal, val)
 	oldVal.Release(mm)
 
-	return &val, didUpdate
+	return &oVal, didUpdate
 }
 
 func (s *Snapshot) Delete(k []byte) bool {

@@ -530,7 +530,7 @@ func (t *Txn) Insert(k, v []byte) (*[]byte, bool) {
 	copy(oVal, val)
 	oldVal.Release(mm)
 
-	return &val, didUpdate
+	return &oVal, didUpdate
 }
 
 func (t *Txn) Delete(k []byte) bool {
