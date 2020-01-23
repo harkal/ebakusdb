@@ -154,11 +154,6 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	b.mux.Lock()
 
-	if b.header.dataWatermark+pagesNeeded*psize > b.bufferSize {
-		b.mux.Unlock()
-		return 0, ErrOutOfMemory
-	}
-
 	var p uint64
 	chunk := b.getChunk(b.header.freePage)
 	if b.header.freePage != 0 && chunk.size == uint32(pagesNeeded) {
@@ -166,6 +161,11 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		b.header.freePage = chunk.nextFree
 		//println("allocate page", p, "new free", *l)
 	} else {
+		if b.header.dataWatermark+pagesNeeded*psize > b.bufferSize {
+			b.mux.Unlock()
+			return 0, ErrOutOfMemory
+		}
+
 		p = b.header.dataWatermark
 		b.header.dataWatermark += pagesNeeded * psize
 	}
