@@ -49,7 +49,7 @@ type header struct {
 }
 
 type chunk struct {
-	nextFree uint64 // zero if occupied
+	nextFree uint64
 	size     uint32
 }
 
@@ -140,6 +140,42 @@ func (b *BufferAllocator) countSequensialFreePages(offset uint64) uint64 {
 	}
 }
 
+func (b *BufferAllocator) mergeChunks(offset uint64) uint64 {
+	psize := uint64(b.header.pageSize)
+
+	curOff := offset
+
+	for curOff != 0 {
+		curChunk := b.getChunk(curOff)
+
+		if curOff+uint64(curChunk.size)*psize == b.header.dataWatermark {
+			b.header.dataWatermark -= uint64(curChunk.size) * psize
+			curOff = curChunk.nextFree
+			continue
+		}
+
+		if curChunk.nextFree == 0 {
+			break
+		}
+
+		nextChunk := b.getChunk(curChunk.nextFree)
+
+		if curChunk.nextFree == curOff+uint64(curChunk.size)*psize {
+			curChunk.nextFree = nextChunk.nextFree
+			curChunk.size += nextChunk.size
+			continue
+		} else if curChunk.nextFree+uint64(nextChunk.size)*psize == curOff {
+			nextChunk.size += curChunk.size
+			curOff = curChunk.nextFree
+			continue
+		}
+
+		break
+	}
+
+	return curOff
+}
+
 // Allocate a new buffer of specific size
 func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	if size == 0 {
@@ -160,6 +196,12 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		p = b.header.freePage
 		b.header.freePage = chunk.nextFree
 		//println("allocate page", p, "new free", *l)
+	} else if b.header.freePage != 0 && chunk.size > uint32(pagesNeeded) {
+		p = b.header.freePage
+		newChunk := b.getChunk(p + pagesNeeded*psize)
+		newChunk.nextFree = chunk.nextFree
+		newChunk.size = chunk.size - uint32(pagesNeeded)
+		b.header.freePage = p + pagesNeeded*psize
 	} else {
 		if b.header.dataWatermark+pagesNeeded*psize > b.bufferSize {
 			b.mux.Unlock()
@@ -204,15 +246,10 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 	b.mux.Lock()
 	defer b.mux.Unlock()
 
-	if offset+size == b.header.dataWatermark {
-		//println("yes")
-		b.header.dataWatermark -= size
-		return nil
-	}
-
-	l := (*chunk)(b.GetPtr(offset))
-	*l = chunk{b.header.freePage, uint32(pagesNeeded)}
-	b.header.freePage = offset
+	l := b.getChunk(offset)
+	l.nextFree = b.header.freePage
+	l.size = uint32(pagesNeeded)
+	b.header.freePage = b.mergeChunks(offset)
 
 	return nil
 }

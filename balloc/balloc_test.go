@@ -68,9 +68,13 @@ func Test_AllocateDeallocate(t *testing.T) {
 		}
 	}
 
+	if err := ba.Deallocate(ps[0], 128); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
+
 	ba.PrintFreeChunks()
 
-	if err := ba.Deallocate(ps[0], 128); err != nil {
+	if err := ba.Deallocate(ps[2], 128); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
@@ -80,26 +84,46 @@ func Test_AllocateDeallocate(t *testing.T) {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
-	if err := ba.Deallocate(ps[3], 128); err != nil {
+	ba.PrintFreeChunks()
+
+	if err := ba.Deallocate(ps[7], 128); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
+
+	ba.PrintFreeChunks()
+
+	if err := ba.Deallocate(ps[9], 128); err != nil {
+		t.Fatal("failed to dellocate 128 bytes")
+	}
+
+	ba.PrintFreeChunks()
+
+	if err := ba.Deallocate(ps[8], 128); err != nil {
 		t.Fatal("failed to dellocate 128 bytes")
 	}
 
 	ba.PrintFreeChunks()
 
 	p, err := ba.Allocate(128, true)
-	if p != ps[3] {
+	if p != ps[0] {
 		t.Fatal("failed to allocate 128 bytes")
 	}
+
+	ba.PrintFreeChunks()
 
 	_, err = ba.Allocate(64, true)
 	if err != nil {
 		t.Fatal("failed to allocate 64 bytes")
 	}
 
+	ba.PrintFreeChunks()
+
 	p, err = ba.Allocate(64, true)
-	if p != ps[0] {
+	if err != nil {
 		t.Fatal("failed to allocate 64 bytes")
 	}
+
+	ba.PrintFreeChunks()
 
 }
 
