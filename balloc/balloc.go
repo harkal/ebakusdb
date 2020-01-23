@@ -44,7 +44,7 @@ type header struct {
 	bufferStart   uint32
 	pageSize      uint16
 	dataWatermark uint64
-	freePage      uint64
+	freePage      chunk
 	TotalUsed     uint64
 }
 
@@ -84,7 +84,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64,
 		buffer.header.magic = magic
 		buffer.header.bufferStart = uint32(dataStart)
 		buffer.header.dataWatermark = dataStart
-		buffer.header.freePage = 0
+		buffer.header.freePage = chunk{0, 0}
 		buffer.header.TotalUsed = 0
 	}
 
@@ -130,7 +130,15 @@ func (b *BufferAllocator) GetOffset(p unsafe.Pointer) uint64 {
 	return uint64(uintptr(p) - uintptr(b.bufferPtr))
 }
 
-var dummy uint64
+func (b *BufferAllocator) countSequensialFreePages(offset uint64) uint64 {
+	psize := uint64(b.header.pageSize)
+
+	for p := offset; ; p += psize {
+		l := (*chunk)(b.GetPtr(p))
+		*l = b.header.freePage
+		b.header.freePage = chunk{p, 1}
+	}
+}
 
 // Allocate a new buffer of specific size
 func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
@@ -152,9 +160,9 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	}
 
 	var p uint64
-	if b.header.freePage != 0 && pagesNeeded == 1 {
-		p = b.header.freePage
-		l := (*uint64)(b.GetPtr(b.header.freePage))
+	if b.header.freePage.nextFree != 0 && b.header.freePage.size == uint32(pagesNeeded) {
+		p = b.header.freePage.nextFree
+		l := (*chunk)(b.GetPtr(b.header.freePage.nextFree))
 		b.header.freePage = *l
 		//println("allocate page", p, "new free", *l)
 	} else {
@@ -202,12 +210,9 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 		return nil
 	}
 
-	for p := offset; p < offset+pagesNeeded*psize; p += psize {
-		l := (*uint64)(b.GetPtr(p))
-		*l = b.header.freePage
-		b.header.freePage = p
-		//println("++ Freeing page", b.header.freePage, "link to", *l)
-	}
+	l := (*chunk)(b.GetPtr(offset))
+	*l = b.header.freePage
+	b.header.freePage = chunk{offset, uint32(pagesNeeded)}
 
 	return nil
 }
