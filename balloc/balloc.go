@@ -44,7 +44,7 @@ type header struct {
 	bufferStart   uint32
 	pageSize      uint16
 	dataWatermark uint64
-	freePage      chunk
+	freePage      uint64
 	TotalUsed     uint64
 }
 
@@ -84,7 +84,7 @@ func NewBufferAllocator(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64,
 		buffer.header.magic = magic
 		buffer.header.bufferStart = uint32(dataStart)
 		buffer.header.dataWatermark = dataStart
-		buffer.header.freePage = chunk{0, 0}
+		buffer.header.freePage = 0
 		buffer.header.TotalUsed = 0
 	}
 
@@ -135,8 +135,8 @@ func (b *BufferAllocator) countSequensialFreePages(offset uint64) uint64 {
 
 	for p := offset; ; p += psize {
 		l := (*chunk)(b.GetPtr(p))
-		*l = b.header.freePage
-		b.header.freePage = chunk{p, 1}
+		l.nextFree = b.header.freePage
+		b.header.freePage = p
 	}
 }
 
@@ -160,10 +160,10 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 	}
 
 	var p uint64
-	if b.header.freePage.nextFree != 0 && b.header.freePage.size == uint32(pagesNeeded) {
-		p = b.header.freePage.nextFree
-		l := (*chunk)(b.GetPtr(b.header.freePage.nextFree))
-		b.header.freePage = *l
+	chunk := b.getChunk(b.header.freePage)
+	if b.header.freePage != 0 && chunk.size == uint32(pagesNeeded) {
+		p = b.header.freePage
+		b.header.freePage = chunk.nextFree
 		//println("allocate page", p, "new free", *l)
 	} else {
 		p = b.header.dataWatermark
@@ -211,8 +211,8 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 	}
 
 	l := (*chunk)(b.GetPtr(offset))
-	*l = b.header.freePage
-	b.header.freePage = chunk{offset, uint32(pagesNeeded)}
+	*l = chunk{b.header.freePage, uint32(pagesNeeded)}
+	b.header.freePage = offset
 
 	return nil
 }
@@ -233,7 +233,7 @@ func (b *BufferAllocator) getPreample(offset uint64) *allocPreable {
 }
 
 func (b *BufferAllocator) PrintFreeChunks() {
-	chunkPos := b.header.dataWatermark
+	chunkPos := b.header.freePage
 	var c *chunk
 	i := 0
 	s := uint64(0)
@@ -241,7 +241,7 @@ func (b *BufferAllocator) PrintFreeChunks() {
 	for chunkPos != 0 {
 		c = b.getChunk(chunkPos)
 
-		fmt.Printf("Free chunk %d to %d (size: %d)\n", chunkPos, uint32(chunkPos)+c.size-1, c.size)
+		fmt.Printf("Free chunk %d to %d (pages: %d)\n", chunkPos, uint32(chunkPos)+c.size*uint32(b.header.pageSize), c.size)
 
 		chunkPos = c.nextFree
 		i++
@@ -249,7 +249,7 @@ func (b *BufferAllocator) PrintFreeChunks() {
 	}
 	fmt.Printf("---------------------------------------\n")
 	fmt.Printf("  Total free chunks: %d\n", i)
-	fmt.Printf("  Total free memory: %d\n", s)
+	fmt.Printf("  Total free pages : %d\n", s)
 
 }
 
