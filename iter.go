@@ -149,7 +149,7 @@ type ResultIterator struct {
 	iter    *Iterator
 	entries [][]byte
 
-	tableRoot *Node
+	tableRoot Ptr
 
 	whereClause *WhereField
 	orderClause *OrderField
@@ -199,7 +199,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 	}
 
-	if ri.tableRoot != nil {
+	if !ri.tableRoot.isNull() {
 		if len(ri.entries) == 0 {
 			_, value, ok := nextIter()
 			if !ok {
@@ -220,7 +220,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		}
 
 		ik = encodeKey(ik)
-		value, ok := ri.tableRoot.Get(ri.db, ik)
+		value, ok := ri.tableRoot.getNode(ri.db.allocator).Get(ri.db, ik)
 		if !ok {
 			return false
 		}

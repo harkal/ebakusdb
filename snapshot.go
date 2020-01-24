@@ -1099,7 +1099,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	s.db.decode(*tPtrMarshaled, &tbl)
 
 	var iter *Iterator
-	var tblNode *Node
+	var tblNode Ptr
 
 	var whereClause *WhereField
 	var orderClause *OrderField
@@ -1137,7 +1137,7 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 		s.db.decode(*tPtrMarshaled, &tPtr)
 		iter = tPtr.getNodeIterator(s.db.allocator)
 
-		tblNode = tbl.Node.getNode(s.db.allocator)
+		tblNode = tbl.Node
 	}
 
 	return &ResultIterator{

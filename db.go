@@ -225,6 +225,9 @@ func (db *DB) Grow() error {
 
 	//fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
 
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
+
 	// Handle in memory case
 	if db.file != nil {
 		if err := db.munmap(); err != nil {
