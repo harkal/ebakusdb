@@ -206,8 +206,12 @@ func (s *Snapshot) addObjAllocated(count int) {
 }
 
 func (s *Snapshot) Release() {
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
 	s.writable = nil
-	s.root.NodeRelease(s.db.allocator)
+	s.root.NodeRelease(mm)
 }
 
 func (s *Snapshot) GetId() uint64 {
@@ -223,12 +227,24 @@ func (s *Snapshot) GetUsedMemory() uint64 {
 }
 
 func (s *Snapshot) Get(k []byte) (*[]byte, bool) {
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	return s.get(k)
+}
+
+func (s *Snapshot) get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
 	return s.root.getNode(s.db.allocator).Get(s.db, k)
 }
 
 func (s *Snapshot) CreateTable(table string, obj interface{}) error {
-	nPtr, _, err := newNode(s.db.allocator)
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	nPtr, _, err := newNode(mm)
 	if err != nil {
 		return err
 	}
@@ -259,13 +275,17 @@ func (s *Snapshot) CreateTable(table string, obj interface{}) error {
 	tbl.Indexes = append(tbl.Indexes, "Id")
 
 	v, _ := s.db.encode(tbl)
-	s.InsertWithNode(getTableKey(table), v, tbl.Node)
+	s.insertWithNode(getTableKey(table), v, tbl.Node)
 
 	return nil
 }
 
 func (s *Snapshot) CreateIndex(index IndexField) error {
-	tPtrMarshaled, found := s.Get(getTableKey(index.Table))
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	tPtrMarshaled, found := s.get(getTableKey(index.Table))
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
@@ -275,31 +295,43 @@ func (s *Snapshot) CreateIndex(index IndexField) error {
 	tbl.Indexes = append(tbl.Indexes, index.Field)
 
 	v, _ := s.db.encode(tbl)
-	s.InsertWithNode(getTableKey(index.Table), v, tbl.Node)
+	s.insertWithNode(getTableKey(index.Table), v, tbl.Node)
 
-	nPtr, _, err := newNode(s.db.allocator)
+	nPtr, _, err := newNode(mm)
 	if err != nil {
 		return err
 	}
 	v, _ = s.db.encode(nPtr)
-	s.InsertWithNode(index.getIndexKey(), v, *nPtr)
+	s.insertWithNode(index.getIndexKey(), v, *nPtr)
 
 	return nil
 }
 
 func (s *Snapshot) HasTable(table string) bool {
-	_, exists := s.Get(getTableKey(table))
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	_, exists := s.get(getTableKey(table))
 
 	return exists
 }
 
 func (s *Snapshot) Iter() *Iterator {
-	iter := s.root.getNodeIterator(s.db.allocator)
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	iter := s.root.getNodeIterator(mm)
 	return iter
 }
 
 func (s *Snapshot) Snapshot() *Snapshot {
-	s.root.getNode(s.db.allocator).Retain()
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	s.root.getNode(mm).Retain()
 
 	return &Snapshot{
 		db:   s.db,
@@ -313,7 +345,11 @@ func (s *Snapshot) ResetTo(to *Snapshot) {
 	}
 	s.Release()
 	s.root = to.root
-	s.root.getNode(s.db.allocator).Retain()
+
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+	s.root.getNode(mm).Retain()
 }
 
 func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
@@ -598,6 +634,14 @@ func (s *Snapshot) Insert(k, v []byte) (*[]byte, bool) {
 }
 
 func (s *Snapshot) InsertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	return s.insertWithNode(k, v, vp)
+}
+
+func (s *Snapshot) insertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
 	if err := checkBytesLength(v); err != nil {
 		return nil, false
 	}
@@ -615,7 +659,9 @@ func (s *Snapshot) InsertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
 		s.root = *newRoot
 	}
 
+	mm.Unlock()
 	s.db.Grow()
+	mm.Lock()
 
 	s.writer.Unlock()
 
@@ -625,10 +671,12 @@ func (s *Snapshot) InsertWithNode(k, v []byte, vp Ptr) (*[]byte, bool) {
 		return nil, didUpdate
 	}
 
+	mm.Lock()
 	val := oldVal.getBytes(mm)
 	oVal := make([]byte, len(val))
 	copy(oVal, val)
 	oldVal.Release(mm)
+	mm.Unlock()
 
 	return &oVal, didUpdate
 }
@@ -638,6 +686,9 @@ func (s *Snapshot) Delete(k []byte) bool {
 	defer s.writer.Unlock()
 
 	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
 	k = encodeKey(k)
 	newRoot, oldVal := s.delete(nil, &s.root, k)
 	if oldVal != nil {
@@ -668,12 +719,14 @@ func compKeys(a []byte, b []byte) bool {
 }
 
 func (s *Snapshot) InsertObj(table string, obj interface{}) error {
-	tPtrMarshaled, found := s.Get(getTableKey(table))
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	tPtrMarshaled, found := s.get(getTableKey(table))
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
-
-	mm := s.db.allocator
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
@@ -715,7 +768,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 	if newRoot != nil {
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
-		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
+		s.insertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
 	}
 
 	var oldV reflect.Value
@@ -736,7 +789,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		}
 
 		ifield := IndexField{Table: table, Field: indexField}
-		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+		tPtrMarshaled, found := s.get(ifield.getIndexKey())
 		if found == false {
 			return fmt.Errorf("Unknown index")
 		}
@@ -815,7 +868,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			if newRoot != nil {
 				tPtr = *newRoot
 				tPtrMarshaled, _ := s.db.encode(tPtr)
-				s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
+				s.insertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 			}
 		}
 
@@ -855,7 +908,7 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 		if newRoot != nil {
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
-			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
+			s.insertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 		}
 	}
 
@@ -863,12 +916,14 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 }
 
 func (s *Snapshot) DeleteObj(table string, id interface{}) error {
-	tPtrMarshaled, found := s.Get(getTableKey(table))
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	tPtrMarshaled, found := s.get(getTableKey(table))
 	if found == false {
 		return fmt.Errorf("Unknown table")
 	}
-
-	mm := s.db.allocator
 
 	var tbl Table
 	s.db.decode(*tPtrMarshaled, &tbl)
@@ -908,7 +963,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	if newRoot != nil {
 		tbl.Node = *newRoot
 		tblMarshaled, _ := s.db.encode(tbl)
-		s.InsertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
+		s.insertWithNode(getTableKey(table), tblMarshaled, tbl.Node)
 	}
 
 	// Do the additional indexes
@@ -918,7 +973,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		}
 
 		ifield := IndexField{Table: table, Field: indexField}
-		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+		tPtrMarshaled, found := s.get(ifield.getIndexKey())
 		if found == false {
 			return fmt.Errorf("Unknown index")
 		}
@@ -987,7 +1042,7 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 		if newRoot != nil {
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
-			s.InsertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
+			s.insertWithNode(ifield.getIndexKey(), tPtrMarshaled, tPtr)
 		}
 	}
 
@@ -1091,7 +1146,11 @@ func (s *Snapshot) OrderParser(input []byte) (*OrderField, error) {
 }
 
 func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, error) {
-	tPtrMarshaled, found := s.Get(getTableKey(table))
+	mm := s.db.allocator
+	mm.Lock()
+	defer mm.Unlock()
+
+	tPtrMarshaled, found := s.get(getTableKey(table))
 	if found == false {
 		return nil, fmt.Errorf("Unknown table")
 	}
@@ -1126,16 +1185,16 @@ func (s *Snapshot) Select(table string, args ...interface{}) (*ResultIterator, e
 	}
 
 	if orderClause.Field == "Id" {
-		iter = tbl.Node.getNodeIterator(s.db.allocator)
+		iter = tbl.Node.getNodeIterator(mm)
 	} else {
 		ifield := IndexField{Table: table, Field: orderClause.Field}
-		tPtrMarshaled, found := s.Get(ifield.getIndexKey())
+		tPtrMarshaled, found := s.get(ifield.getIndexKey())
 		if found == false {
 			return nil, fmt.Errorf("Unknown index")
 		}
 		var tPtr Ptr
 		s.db.decode(*tPtrMarshaled, &tPtr)
-		iter = tPtr.getNodeIterator(s.db.allocator)
+		iter = tPtr.getNodeIterator(mm)
 
 		tblNode = tbl.Node
 	}

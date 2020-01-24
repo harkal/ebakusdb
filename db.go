@@ -225,8 +225,8 @@ func (db *DB) Grow() error {
 
 	//fmt.Printf("Will grow to %d MB\n", newSize/megaByte)
 
-	db.allocator.Lock()
-	defer db.allocator.Unlock()
+	db.allocator.WLock()
+	defer db.allocator.WUnlock()
 
 	// Handle in memory case
 	if db.file != nil {
@@ -338,6 +338,8 @@ func safeStringFromEncoded(key []byte) string {
 
 func (db *DB) Get(k []byte) (*[]byte, bool) {
 	k = encodeKey(k)
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
 	return db.header.root.getNode(db.allocator).Get(db, k)
 }
 
@@ -376,6 +378,9 @@ func (db *DB) Iter() *Iterator {
 }
 
 func (db *DB) Snapshot(id uint64) *Snapshot {
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
+
 	if id == 0 {
 		db.header.root.getNode(db.allocator).Retain()
 
@@ -395,6 +400,9 @@ func (db *DB) Snapshot(id uint64) *Snapshot {
 }
 
 func (db *DB) GetRootSnapshot() *Snapshot {
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
+
 	db.header.root.getNode(db.allocator).Retain()
 
 	return &Snapshot{
@@ -404,12 +412,18 @@ func (db *DB) GetRootSnapshot() *Snapshot {
 }
 
 func (db *DB) SetRootSnapshot(s *Snapshot) {
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
+
 	db.header.root.NodeRelease(db.allocator)
 	db.header.root = *s.Root()
 	db.header.root.getNode(db.allocator).Retain()
 }
 
 func (db *DB) PrintTree() {
+	db.allocator.Lock()
+	defer db.allocator.Unlock()
+
 	fmt.Println("<>")
 	db.header.root.getNode(db.allocator).printTree(db.allocator, 0, "", false)
 }

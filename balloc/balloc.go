@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -26,6 +27,9 @@ type MemoryManager interface {
 
 	GetUsed() uint64
 	GetFree() uint64
+
+	Lock()
+	Unlock()
 }
 
 // BufferAllocator allocates memory in a preallocated buffer
@@ -33,8 +37,9 @@ type BufferAllocator struct {
 	bufferPtr  unsafe.Pointer
 	bufferSize uint64
 	header     *header
+	headerLock uintptr
 
-	lock uintptr
+	bufferMux sync.RWMutex
 }
 
 const magic uint32 = 0xca01af01
@@ -101,13 +106,29 @@ func (b *BufferAllocator) GetPageOffset(offset uint64) uint64 {
 }
 
 func (b *BufferAllocator) Lock() {
-	for !atomic.CompareAndSwapUintptr(&b.lock, 0, 1) {
+	b.bufferMux.RLock()
+}
+
+func (b *BufferAllocator) Unlock() {
+	b.bufferMux.RUnlock()
+}
+
+func (b *BufferAllocator) WLock() {
+	b.bufferMux.Lock()
+}
+
+func (b *BufferAllocator) WUnlock() {
+	b.bufferMux.Unlock()
+}
+
+func (b *BufferAllocator) headLock() {
+	for !atomic.CompareAndSwapUintptr(&b.headerLock, 0, 1) {
 		runtime.Gosched()
 	}
 }
 
-func (b *BufferAllocator) Unlock() {
-	atomic.StoreUintptr(&b.lock, 0)
+func (b *BufferAllocator) headUnlock() {
+	atomic.StoreUintptr(&b.headerLock, 0)
 }
 
 func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, firstFree uint64) {
@@ -119,8 +140,8 @@ func (b *BufferAllocator) SetBuffer(bufPtr unsafe.Pointer, bufSize uint64, first
 }
 
 func (b *BufferAllocator) GetFree() uint64 {
-	b.Lock()
-	defer b.Unlock()
+	b.headLock()
+	defer b.headUnlock()
 	return b.bufferSize - b.header.dataWatermark
 }
 
@@ -133,17 +154,11 @@ func (b *BufferAllocator) GetCapacity() uint64 {
 }
 
 func (b *BufferAllocator) GetPtr(pos uint64) unsafe.Pointer {
-	for !atomic.CompareAndSwapUintptr(&b.lock, 0, 1) {
-		runtime.Gosched()
-	}
 	ret := unsafe.Pointer(uintptr(b.bufferPtr) + uintptr(pos))
-	atomic.StoreUintptr(&b.lock, 0)
 	return ret
 }
 
 func (b *BufferAllocator) GetOffset(p unsafe.Pointer) uint64 {
-	b.Lock()
-	defer b.Unlock()
 	return uint64(uintptr(p) - uintptr(b.bufferPtr))
 }
 
@@ -205,7 +220,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 
 	pagesNeeded := (size + psize - 1) / psize
 
-	b.Lock()
+	b.headLock()
 
 	var p uint64
 	chunk := b.getChunk(b.header.freePage)
@@ -221,7 +236,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		b.header.freePage = p + pagesNeeded*psize
 	} else {
 		if b.header.dataWatermark+pagesNeeded*psize > b.bufferSize {
-			b.Unlock()
+			b.headUnlock()
 			return 0, ErrOutOfMemory
 		}
 
@@ -229,7 +244,7 @@ func (b *BufferAllocator) Allocate(size uint64, zero bool) (uint64, error) {
 		b.header.dataWatermark += pagesNeeded * psize
 	}
 
-	b.Unlock()
+	b.headUnlock()
 
 	if zero {
 		buf := (*[maxBufferSize]byte)(b.GetPtr(p))[:size]
@@ -260,13 +275,14 @@ func (b *BufferAllocator) Deallocate(offset, size uint64) error {
 
 	// println("++ Freeing ", size, "at ", offset)
 
-	b.Lock()
-	defer b.Unlock()
+	b.headLock()
 
 	l := b.getChunk(offset)
 	l.nextFree = b.header.freePage
 	l.size = uint32(pagesNeeded)
 	b.header.freePage = b.mergeChunks(offset)
+
+	b.headUnlock()
 
 	return nil
 }
