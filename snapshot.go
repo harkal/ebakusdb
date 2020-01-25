@@ -364,11 +364,11 @@ func (s *Snapshot) writeNode(nodePtr *Ptr) *Ptr {
 
 	n := nodePtr.getNode(mm)
 
-	// if _, ok := s.writable.Get(*nodePtr); ok {
-	// 	//println("hit", t.writable.Len())
-	// 	n.Retain()
-	// 	return nodePtr
-	// }
+	if _, ok := s.writable.Get(*nodePtr); ok {
+		//println("hit", t.writable.Len())
+		n.Retain()
+		return nodePtr
+	}
 
 	//println("miss", t.writable.Len())
 
@@ -452,6 +452,9 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := s.writeNode(nodePtr)
+		if nc == nodePtr {
+			nc.NodeRelease(mm)
+		}
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
 
 		return nc, nil, false
@@ -496,8 +499,9 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 	nc.edges[edgeLabel].NodeRelease(mm)
 	nc.edges[edgeLabel] = *splitNodePtr
 
+	newPrefix := *newBytesFromSlice(mm, pref[commonPrefix:])
 	modChild.prefixPtr.Release(mm)
-	modChild.prefixPtr = *newBytesFromSlice(mm, pref[commonPrefix:])
+	modChild.prefixPtr = newPrefix
 
 	// If the new key is a subset, add to this node
 	search = search[commonPrefix:]
