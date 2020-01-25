@@ -192,7 +192,7 @@ func (n *Node) printTree(mm balloc.MemoryManager, child int, indent string, last
 		indent += "| "
 	}
 
-	fmt.Printf("[%d] Prefix: (%s) Refs: %d ", mm.GetOffset(unsafe.Pointer(n)), safeStringFromEncoded(n.prefixPtr.getBytes(mm)), n.refCount)
+	fmt.Printf("[%d] Prefix[%d]: (%s) Refs: %d ", mm.GetOffset(unsafe.Pointer(n)), n.prefixPtr, safeStringFromEncoded(n.prefixPtr.getBytes(mm)), n.refCount)
 
 	if n.isLeaf() {
 		fmt.Printf(" Key[%d]: (%s)[%d] Value[%d]: (%s)[%d] ",
