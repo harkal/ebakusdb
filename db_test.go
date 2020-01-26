@@ -173,6 +173,36 @@ func Test_Snap(test *testing.T) {
 	}
 }
 
+func Test_WriterCrash(test *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		test.Fatal("Failed to open db")
+	}
+
+	t := db.GetRootSnapshot()
+
+	_, update := t.Insert([]byte{1}, []byte("kalogirou"))
+	if update == true {
+		test.Fatal("Update failed")
+	}
+	_, update = t.Insert([]byte{2}, []byte("v"))
+	if update == true {
+		test.Fatal("Update failed")
+	}
+
+	if v, _ := t.Get([]byte{1}); string(*v) != "kalogirou" {
+		test.Fatalf("Get failed (got %v)", v)
+	}
+
+	db.SetRootSnapshot(t)
+	t.Release()
+
+	if db.allocator.GetUsed() != 2112 {
+		test.Fatal("incorrect used memory at end", db.allocator.GetUsed())
+	}
+}
+
 func Test_SnapshotTnx(test *testing.T) {
 	db, err := Open(tempfile(), 0, nil)
 	defer os.Remove(db.GetPath())
@@ -1715,7 +1745,6 @@ func Test_DeleteLookupPrefixAfterMerge(t *testing.T) {
 
 	p1 := [2]byte{1, 20}
 	p2 := [2]byte{20, 1}
-
 	if err := snap.InsertObj(DelegationsTable, &Delegation{
 		Id: p1,
 	}); err != nil {

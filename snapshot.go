@@ -331,6 +331,8 @@ func (s *Snapshot) Snapshot() *Snapshot {
 	mm.Lock()
 	defer mm.Unlock()
 
+	s.writable = nil
+
 	s.root.getNode(mm).Retain()
 
 	return &Snapshot{
@@ -452,9 +454,6 @@ func (s *Snapshot) insert(nodePtr *Ptr, k, search []byte, vPtr ByteArray, vNode 
 		nn.prefixPtr = *newBytesFromSlice(mm, search)
 
 		nc := s.writeNode(nodePtr)
-		if nc == nodePtr {
-			nc.NodeRelease(mm)
-		}
 		nc.getNode(mm).edges[edgeLabel] = *nnPtr
 
 		return nc, nil, false
@@ -767,6 +766,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 
 	objPtr := *newBytesFromSlice(mm, objMarshaled)
 	newRoot, oldVal, _ := s.insert(&tbl.Node, ek, ek, objPtr, 0)
+	if *newRoot == tbl.Node {
+		newRoot.NodeRelease(mm)
+	}
 	objPtr.Release(mm)
 
 	if newRoot != nil {
@@ -869,6 +871,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			if oldIVal != nil {
 				oldIVal.Release(mm)
 			}
+			if *newRoot == tPtr {
+				newRoot.NodeRelease(mm)
+			}
 			if newRoot != nil {
 				tPtr = *newRoot
 				tPtrMarshaled, _ := s.db.encode(tPtr)
@@ -909,6 +914,9 @@ func (s *Snapshot) InsertObj(table string, obj interface{}) error {
 			oldValue.Release(mm)
 		}
 		pKeyPtr.Release(mm)
+		if *newRoot == tPtr {
+			newRoot.NodeRelease(mm)
+		}
 		if newRoot != nil {
 			tPtr = *newRoot
 			tPtrMarshaled, _ := s.db.encode(tPtr)
@@ -941,6 +949,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 	s.addObjAllocated(-len(k))
 
 	newRoot, oldVal := s.delete(nil, &tbl.Node, ek)
+	if *newRoot == tbl.Node {
+		newRoot.NodeRelease(mm)
+	}
 	if oldVal != nil {
 		defer oldVal.Release(mm)
 		s.addObjAllocated(-int(oldVal.Size))
@@ -1042,6 +1053,9 @@ func (s *Snapshot) DeleteObj(table string, id interface{}) error {
 
 		if oldIVal != nil {
 			oldIVal.Release(mm)
+		}
+		if *newRoot == tPtr {
+			newRoot.NodeRelease(mm)
 		}
 		if newRoot != nil {
 			tPtr = *newRoot
