@@ -44,6 +44,15 @@ type DB struct {
 	decode DBDecoder
 }
 
+type DBInfo struct {
+	Path          string
+	BufferStart   uint32
+	PageSize      uint16
+	Watermark     uint64
+	TotalUsed     uint64
+	TotalCapacity uint64
+}
+
 const magic uint32 = 0xff01cf11
 const version uint32 = 1
 
@@ -142,6 +151,18 @@ func OpenInMemory(options *Options) (*DB, error) {
 func (db *DB) SetCustomEncoder(encode DBEncoder, decode DBDecoder) {
 	db.encode = encode
 	db.decode = decode
+}
+
+func (db *DB) GetInfo() DBInfo {
+	h := db.allocator.GetHeader()
+	return DBInfo{
+		Path:          db.path,
+		BufferStart:   h.BufferStart,
+		PageSize:      h.PageSize,
+		Watermark:     h.DataWatermark,
+		TotalUsed:     h.TotalUsed,
+		TotalCapacity: db.allocator.GetCapacity(),
+	}
 }
 
 func (db *DB) GetPath() string {
@@ -426,4 +447,8 @@ func (db *DB) PrintTree() {
 
 	fmt.Println("<>")
 	db.header.root.getNode(db.allocator).printTree(db.allocator, 0, "", false)
+}
+
+func (db *DB) PrintFreeChunks() {
+	db.allocator.PrintFreeChunks()
 }
