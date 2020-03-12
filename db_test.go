@@ -2389,6 +2389,54 @@ func Test_Iterator(test *testing.T) {
 	iter.SeekPrefix([]byte("G"))
 }
 
+func Test_GobEncoderTablesZeroValues(t *testing.T) {
+	db, err := Open(tempfile(), 0, nil)
+	defer os.Remove(db.GetPath())
+	if err != nil || db == nil {
+		t.Fatal("Failed to open db", err)
+	}
+	db.SetCustomEncoder(GobMarshal, GobUnmarshal)
+
+	type Witness struct {
+		Id    uint64
+		Stake uint64
+	}
+
+	const WitnessesTable string = "Witnesses"
+
+	db.CreateTable(WitnessesTable, &Witness{})
+	db.CreateIndex(IndexField{
+		Table: WitnessesTable,
+		Field: "Stake",
+	})
+
+	snap := db.GetRootSnapshot()
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    0,
+		Stake: 4,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	if err := snap.InsertObj(WitnessesTable, &Witness{
+		Id:    2,
+		Stake: 2,
+	}); err != nil {
+		t.Fatal("Failed to insert row error:", err)
+	}
+
+	whereClause, _ := snap.WhereParser([]byte("Id = 0"))
+	orderClause, _ := snap.OrderParser([]byte("Stake ASC"))
+	iter, err := snap.Select(WitnessesTable, whereClause, orderClause)
+
+	var w Witness
+	found := iter.Next(&w)
+	if !found || w.Id != 0 {
+		t.Fatal("Returned wrong row", w, found)
+	}
+}
+
 func tempfile() string {
 	f, err := ioutil.TempFile("/tmp", "ebakusdb-")
 	if err != nil {

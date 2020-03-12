@@ -108,6 +108,11 @@ func byteArrayToReflectValue(value []byte, t reflect.Type) (reflect.Value, error
 			if err != nil {
 				return reflect.Value{}, err
 			}
+
+			if t == reflect.TypeOf(common.Address{}) {
+				return reflect.ValueOf(common.BytesToAddress(decoded)), nil
+			}
+
 			return reflect.ValueOf(decoded), nil
 
 		} else if t == reflect.TypeOf(common.Address{}) {

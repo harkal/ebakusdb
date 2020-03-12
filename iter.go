@@ -167,6 +167,8 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 		return ri.iter.Next()
 	}
 
+	zeroOutReflect(val)
+
 	var whereObjValue reflect.Value
 	var whereValueType reflect.Type
 
@@ -239,6 +241,7 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 			obj = reflect.Indirect(obj)
 
 			whereObjValue = obj.FieldByName(ri.whereClause.Field)
+
 			if !whereObjValue.IsValid() {
 				return ri.Next(val)
 			}
@@ -300,4 +303,12 @@ func (ri *ResultIterator) Next(val interface{}) bool {
 	}
 
 	return true
+}
+
+func zeroOutReflect(val interface{}) {
+	if reflect.Ptr == reflect.TypeOf(val).Kind() {
+		st := reflect.ValueOf(val)
+		st = reflect.Indirect(st)
+		st.Set(reflect.Zero(st.Type()))
+	}
 }

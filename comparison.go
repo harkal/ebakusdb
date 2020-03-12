@@ -116,7 +116,12 @@ func eqM(arg1 reflect.Value, arg2 ...reflect.Value) (bool, error) {
 				truth = v1.Int() >= 0 && uint64(v1.Int()) == v2.Uint()
 			case k1 == uintKind && k2 == intKind:
 				truth = v2.Int() >= 0 && v1.Uint() == uint64(v2.Int())
-			case (k1 == arrayKind && k2 == sliceKind) || (k1 == sliceKind && k2 == arrayKind):
+			case (k1 == arrayKind && k2 == sliceKind),
+				(k1 == arrayKind && k2 == addressKind),
+				(k1 == sliceKind && k2 == arrayKind),
+				(k1 == sliceKind && k2 == addressKind),
+				(k1 == addressKind && k2 == arrayKind),
+				(k1 == addressKind && k2 == sliceKind):
 				truth = reflect.DeepEqual(sliceToArray(v1).Interface(), sliceToArray(v2).Interface())
 			default:
 				return false, errBadComparison
